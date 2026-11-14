@@ -142,6 +142,8 @@ rootfs.img.bak
 rootfs/
 trash/
 out/
+out-linux/
+toolchains/
 magiskboot
 magiskboot_unp/
 magiskboot_unp
