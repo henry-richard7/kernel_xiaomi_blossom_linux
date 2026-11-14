@@ -358,14 +358,14 @@ static int battery_psy_get_property(struct power_supply *psy,
 				size = fg_get_saddles(gm);
 				if (profile_p && size > 0) {
 					raw_soc = interpolate_soc(profile_p, size, vbat * 10);
-					pr_info("MTK_BATTERY_DEBUG: size=%d, tb1=%d, p0_vol=%d, p1_vol=%d, plast_vol=%d, target_ocv=%d, raw_soc=%d\n",
+					pr_debug("MTK_BATTERY_DEBUG: size=%d, tb1=%d, p0_vol=%d, p1_vol=%d, plast_vol=%d, target_ocv=%d, raw_soc=%d\n",
 						size, gm->fg_table_cust_data.temperature_tb1,
 						profile_p[0].voltage, profile_p[1].voltage, profile_p[size-1].voltage, vbat * 10, raw_soc);
 				} else {
-					pr_info("MTK_BATTERY_DEBUG: profile_p is NULL or size=0!\n");
+					pr_debug("MTK_BATTERY_DEBUG: profile_p is NULL or size=0!\n");
 				}
 			}
-			pr_info("MTK_BATTERY: cap=%d ui_soc=%d vbat=%d raw_soc=%d active=%d\n",
+			pr_debug("MTK_BATTERY: cap=%d ui_soc=%d vbat=%d raw_soc=%d active=%d\n",
 				cap, gm->ui_soc, vbat, raw_soc, gm->algo.active);
 			if (cap < 0 || cap > 100) {
 				cap = raw_soc;

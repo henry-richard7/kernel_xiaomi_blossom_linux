@@ -46,6 +46,7 @@ fail() {
 mount -t devtmpfs devtmpfs /dev || fail "could not mount devtmpfs"
 mount -t proc proc /proc || fail "could not mount proc"
 mount -t sysfs sysfs /sys || fail "could not mount sysfs"
+echo "1 4 1 7" > /proc/sys/kernel/printk 2>/dev/null || true
 
 # console=ttyGS0 only selects a console; it does not create a USB gadget.
 # Bind an ACM function early so the host can capture boot output and reach

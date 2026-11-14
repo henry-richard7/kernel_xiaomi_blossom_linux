@@ -283,7 +283,7 @@ static int mtkts_dctm_get_temp(struct thermal_zone_device *thermal, int *t)
 	}
 
 	if (t_ret < 0)
-		pr_notice("%s, wakeup_ta_algo out of memory\n", __func__);
+		pr_debug("%s, wakeup_ta_algo out of memory\n", __func__);
 
 	if ((int)*t >= polling_trip_temp1)
 		thermal->polling_delay = interval * 1000;
