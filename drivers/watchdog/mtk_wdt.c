@@ -60,6 +60,7 @@
 
 static bool nowayout = WATCHDOG_NOWAYOUT;
 static unsigned int timeout;
+static bool enable_wdt;
 
 static int mtk_wdt_set_timeout(struct watchdog_device *wdt_dev,
 			       unsigned int timeout);
@@ -186,9 +187,18 @@ static void mtk_wdt_init(struct device_node *np,
 	if (np)
 		mtk_wdt_parse_dt(np, wdt_dev);
 
-	if (readl(wdt_base + WDT_MODE) & WDT_MODE_EN) {
-		set_bit(WDOG_HW_RUNNING, &wdt_dev->status);
-		mtk_wdt_set_timeout(wdt_dev, wdt_dev->timeout);
+	if (enable_wdt) {
+		if (readl(wdt_base + WDT_MODE) & WDT_MODE_EN) {
+			set_bit(WDOG_HW_RUNNING, &wdt_dev->status);
+			mtk_wdt_set_timeout(wdt_dev, wdt_dev->timeout);
+		}
+	} else {
+		/*
+		 * MediaTek LK bootloader enables the hardware watchdog before booting.
+		 * Explicitly stop it on boot so native Linux userspace is not rebooted
+		 * after 31s when no watchdog daemon is running.
+		 */
+		mtk_wdt_stop(wdt_dev);
 	}
 }
 
@@ -252,7 +262,7 @@ static int mtk_wdt_stop(struct watchdog_device *wdt_dev)
 	u32 reg;
 
 	reg = readl(wdt_base + WDT_MODE);
-	reg &= ~WDT_MODE_EN;
+	reg &= ~(WDT_MODE_EN | WDT_MODE_AUTO_START);
 	reg |= WDT_MODE_KEY;
 	iowrite32(reg, wdt_base + WDT_MODE);
 
@@ -267,6 +277,11 @@ static int mtk_wdt_start(struct watchdog_device *wdt_dev)
 	struct mtk_wdt_dev *mtk_wdt = watchdog_get_drvdata(wdt_dev);
 	void __iomem *wdt_base = mtk_wdt->wdt_base;
 	int ret;
+
+	if (!enable_wdt) {
+		pr_info("mtk-wdt: hardware watchdog is disabled for native Linux\n");
+		return 0;
+	}
 
 	ret = mtk_wdt_set_timeout(wdt_dev, wdt_dev->timeout);
 	if (ret < 0)
@@ -336,7 +351,8 @@ static int mtk_wdt_probe(struct platform_device *pdev)
 	if (unlikely(err))
 		return err;
 
-	dev_info(dev, "Watchdog enabled (timeout=%d sec, nowayout=%d)\n",
+	dev_info(dev, "Watchdog %s (timeout=%d sec, nowayout=%d)\n",
+		 enable_wdt ? "enabled" : "disabled by default",
 		 mtk_wdt->wdt_dev.timeout, nowayout);
 
 	wdt_data = of_device_get_match_data(dev);
@@ -402,6 +418,9 @@ MODULE_PARM_DESC(timeout, "Watchdog heartbeat in seconds");
 module_param(nowayout, bool, 0);
 MODULE_PARM_DESC(nowayout, "Watchdog cannot be stopped once started (default="
 			__MODULE_STRING(WATCHDOG_NOWAYOUT) ")");
+
+module_param(enable_wdt, bool, 0644);
+MODULE_PARM_DESC(enable_wdt, "Enable hardware watchdog timer (default=false)");
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Matthias Brugger <matthias.bgg@gmail.com>");
