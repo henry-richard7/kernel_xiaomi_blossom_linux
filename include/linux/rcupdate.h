@@ -885,7 +885,12 @@ static inline notrace void rcu_read_unlock_sched_notrace(void)
  * checks are done in macros here.
  */
 #define kfree_rcu(ptr, rcu_head)					\
-	__kfree_rcu(&((ptr)->rcu_head), offsetof(typeof(*(ptr)), rcu_head))
+	do {								\
+		typeof(ptr) __kfree_rcu_ptr = (ptr);			\
+		if (__kfree_rcu_ptr)					\
+			__kfree_rcu(&((__kfree_rcu_ptr)->rcu_head),	\
+				    offsetof(typeof(*(__kfree_rcu_ptr)), rcu_head));\
+	} while (0)
 
 
 /*
