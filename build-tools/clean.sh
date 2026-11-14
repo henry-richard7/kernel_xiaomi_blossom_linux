@@ -11,15 +11,17 @@ fi
 
 echo "[+] Cleaning build outputs..."
 
-if [ -d "out" ]; then
-    if [ "$CLEAN_ALL" = true ]; then
-        echo "[-] Removing entire out/ directory (including flashable zips)..."
-        rm -rf out
-    else
-        echo "[-] Cleaning intermediate build objects in out/ (preserving out/flashable-kernel/)..."
-        find out -mindepth 1 -maxdepth 1 ! -name 'flashable-kernel' -exec rm -rf {} +
+for dir in out out-linux; do
+    if [ -d "$dir" ]; then
+        if [ "$CLEAN_ALL" = true ]; then
+            echo "[-] Removing entire $dir/ directory..."
+            rm -rf "$dir"
+        else
+            echo "[-] Cleaning intermediate build objects in $dir/ (preserving boot images)..."
+            find "$dir" -mindepth 1 -maxdepth 1 ! -name 'boot-linux.img' ! -name 'initramfs.cpio.gz' -exec rm -rf {} +
+        fi
     fi
-fi
+done
 
 # Clean stray in-tree configs/artifacts if any exist
 rm -f .config .config.old
