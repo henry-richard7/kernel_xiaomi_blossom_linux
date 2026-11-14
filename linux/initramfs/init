@@ -141,6 +141,10 @@ if [ "${IS_DROIDIAN}" -eq 1 ]; then
 	done
 
 	# 2. Mount internal Android /vendor partition (read-only)
+	# If /vendor is a pre-existing or broken symlink, remove the symlink so we can mount a real directory
+	if [ -L /newroot/vendor ] || [ -h /newroot/vendor ]; then
+		rm -f /newroot/vendor
+	fi
 	mkdir -p /newroot/vendor
 	if [ -b "/dev/block/by-name/vendor" ]; then
 		mount -t ext4 -o ro /dev/block/by-name/vendor /newroot/vendor 2>/dev/null || \
@@ -148,9 +152,14 @@ if [ "${IS_DROIDIAN}" -eq 1 ]; then
 		echo "Warning: could not mount /dev/block/by-name/vendor" >/dev/console
 	fi
 
-	# 3. Bind-mount /vendor into LXC Android container rootfs
-	mkdir -p /newroot/var/lib/lxc/android/rootfs/vendor
-	mount -o bind,ro /newroot/vendor /newroot/var/lib/lxc/android/rootfs/vendor 2>/dev/null || true
+	# 3. Bind-mount /vendor into paths expected by Halium / LXC container
+	for p in /newroot/var/lib/lxc/android/rootfs/vendor /newroot/android/vendor /newroot/system/vendor; do
+		if [ -L "${p}" ] || [ -h "${p}" ]; then
+			rm -f "${p}"
+		fi
+		mkdir -p "${p}" 2>/dev/null || true
+		mount -o bind,ro /newroot/vendor "${p}" 2>/dev/null || true
+	done
 fi
 
 if [ -d /lib/firmware ]; then
