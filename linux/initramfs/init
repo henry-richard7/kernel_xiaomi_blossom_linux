@@ -180,6 +180,31 @@ if [ -f /newroot/etc/inittab ]; then
 fi
 rm -f /newroot/etc/runlevels/*/agetty* /newroot/etc/runlevels/*/getty* 2>/dev/null || true
 
+# Silence OpenRC /lib/modules missing warning
+mkdir -p /newroot/lib/modules/4.19.325-cip136-st8-linux-unified
+
+# Ensure MTK connectivity device nodes exist in /dev
+for cdev in wmtWifi stpwmt wmtdetect stpbt stpgps; do
+	if [ -f "/sys/class/${cdev}/${cdev}/dev" ] && [ ! -e "/dev/${cdev}" ]; then
+		mknod "/dev/${cdev}" c $(tr ':' ' ' < "/sys/class/${cdev}/${cdev}/dev") 2>/dev/null || true
+	fi
+done
+
+# Set up automatic Wi-Fi trigger in OpenRC
+if [ -d /newroot/etc ]; then
+	mkdir -p /newroot/etc/local.d /newroot/etc/runlevels/default
+	cat << 'EOF' > /newroot/etc/local.d/00-wifi.start
+#!/bin/sh
+if [ -c /dev/wmtWifi ]; then
+	echo 1 > /dev/wmtWifi 2>/dev/null || true
+	sleep 1
+	ip link set wlan0 up 2>/dev/null || true
+fi
+EOF
+	chmod 0755 /newroot/etc/local.d/00-wifi.start
+	ln -sf /etc/init.d/local /newroot/etc/runlevels/default/local 2>/dev/null || true
+fi
+
 mkdir -p /newroot/dev /newroot/proc /newroot/sys /newroot/run /newroot/boot ||
 	fail "could not prepare Linux mount points"
 mount -o move /dev /newroot/dev || fail "could not move /dev"
