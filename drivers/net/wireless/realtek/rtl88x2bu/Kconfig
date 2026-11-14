@@ -1,0 +1,17 @@
+# SPDX-License-Identifier: GPL-2.0
+
+config RTL8822BU
+	tristate "Realtek 88x2BU USB WiFi (RTL8812BU/RTL8822BU)"
+	depends on USB && CFG80211
+	select WIRELESS_EXT
+	select WEXT_PRIV
+	help
+	  This option adds support for Realtek RTL8812BU and RTL8822BU USB
+	  wireless network adapters, including TP-Link Archer T4U Plus v1,
+	  TP-Link Archer T4U v3, TP-Link Archer T3U, Archer T3U Plus, and
+	  other AC1200 / AC1300 dual-band USB Wi-Fi dongles.
+
+	  Supports monitor mode and packet injection.
+
+	  To compile this driver as a module, choose M here: the module
+	  will be called 88x2bu.
