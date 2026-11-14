@@ -84,7 +84,6 @@ fi
 mkdir -p /mnt/sd /newroot || fail "could not create mount points"
 
 SD_PARTITION=/dev/mmcblk1p1
-ROOTFS_IMAGE=/mnt/sd/linux-rootfs.ext4
 
 attempt=0
 while [ ! -b "${SD_PARTITION}" ] && [ "${attempt}" -lt 12 ]; do
@@ -93,17 +92,57 @@ while [ ! -b "${SD_PARTITION}" ] && [ "${attempt}" -lt 12 ]; do
 done
 
 [ -b "${SD_PARTITION}" ] || fail "microSD partition ${SD_PARTITION} did not appear"
-mount -t vfat -o rw "${SD_PARTITION}" /mnt/sd || fail "could not mount the microSD FAT32 partition"
+
+# Auto-mount exFAT, ext4, or vfat/FAT32
+mount -o rw "${SD_PARTITION}" /mnt/sd 2>/dev/null || \
+mount -t exfat -o rw "${SD_PARTITION}" /mnt/sd 2>/dev/null || \
+mount -t ext4 -o rw "${SD_PARTITION}" /mnt/sd 2>/dev/null || \
+mount -t vfat -o rw "${SD_PARTITION}" /mnt/sd || fail "could not mount microSD partition (tried exfat, ext4, vfat)"
+
 LOG_FILE=/mnt/sd/native-linux-boot.log
 : > "${LOG_FILE}" || fail "could not create ${LOG_FILE}"
 log_state "microSD mounted"
-[ -f "${ROOTFS_IMAGE}" ] || fail "missing ${ROOTFS_IMAGE}"
-log_state "rootfs image found"
+
+# Select rootfs image: support both Droidian and Alpine
+IS_DROIDIAN=0
+if [ -f /mnt/sd/droidian-rootfs.ext4 ]; then
+	ROOTFS_IMAGE=/mnt/sd/droidian-rootfs.ext4
+	IS_DROIDIAN=1
+elif [ -f /mnt/sd/linux-rootfs.ext4 ]; then
+	ROOTFS_IMAGE=/mnt/sd/linux-rootfs.ext4
+	IS_DROIDIAN=0
+else
+	fail "no rootfs found on microSD (expected droidian-rootfs.ext4 or linux-rootfs.ext4)"
+fi
+
+log_state "rootfs image found: ${ROOTFS_IMAGE}"
 
 losetup /dev/loop0 "${ROOTFS_IMAGE}" || fail "could not attach the ext4 rootfs image"
 log_state "loop device attached"
 mount -t ext4 -o rw,noatime /dev/loop0 /newroot || fail "could not mount the ext4 rootfs image"
 log_state "rootfs mounted"
+
+# If booting Droidian, mount internal Android /vendor partition (read-only)
+if [ "${IS_DROIDIAN}" -eq 1 ]; then
+	echo "Droidian detected: mounting internal /vendor partition..." >/dev/console
+	mkdir -p /newroot/vendor
+	VENDOR_DEV=""
+	for u in /sys/class/block/mmcblk0p*/uevent; do
+		[ -f "$u" ] || continue
+		PARTNAME=""
+		DEVNAME=""
+		. "$u"
+		if [ "$PARTNAME" = "vendor" ]; then
+			VENDOR_DEV="/dev/${DEVNAME}"
+			break
+		fi
+	done
+	if [ -n "${VENDOR_DEV}" ] && [ -b "${VENDOR_DEV}" ]; then
+		mount -t ext4 -o ro "${VENDOR_DEV}" /newroot/vendor 2>/dev/null || \
+		mount -o ro "${VENDOR_DEV}" /newroot/vendor 2>/dev/null || \
+		echo "Warning: could not mount ${VENDOR_DEV} to /newroot/vendor" >/dev/console
+	fi
+fi
 
 if [ -d /lib/firmware ]; then
 	mkdir -p /newroot/lib/firmware
@@ -129,5 +168,12 @@ mount -o move /mnt/sd /newroot/boot || fail "could not move the microSD mount"
 
 LOG_FILE=/newroot/boot/native-linux-boot.log
 log_state "switch_root starting"
-exec switch_root /newroot /sbin/init
+INIT_BIN="/sbin/init"
+if [ ! -x "/newroot/sbin/init" ] && [ -x "/newroot/lib/systemd/systemd" ]; then
+	INIT_BIN="/lib/systemd/systemd"
+elif [ ! -x "/newroot/sbin/init" ] && [ -x "/newroot/bin/sh" ]; then
+	INIT_BIN="/bin/sh"
+fi
+
+exec switch_root /newroot "${INIT_BIN}"
 fail "switch_root returned unexpectedly"
