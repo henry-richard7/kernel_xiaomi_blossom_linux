@@ -33,6 +33,11 @@ chmod 0755 "${STAGE_DIR}/bin/busybox" "${STAGE_DIR}/lib/ld-musl-aarch64.so.1"
 ln -s ld-musl-aarch64.so.1 "${STAGE_DIR}/lib/libc.musl-aarch64.so.1"
 install -m 0755 "${INITRAMFS_DIR}/init" "${STAGE_DIR}/init"
 
+if [ -d "${ROOT_DIR}/firmware" ]; then
+	mkdir -p "${STAGE_DIR}/lib/firmware"
+	cp -a "${ROOT_DIR}/firmware"/* "${STAGE_DIR}/lib/firmware/" 2>/dev/null || true
+fi
+
 for applet in sh mount losetup switch_root sleep mkdir dmesg cat; do
 	ln -s busybox "${STAGE_DIR}/bin/${applet}"
 done
