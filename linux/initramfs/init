@@ -103,16 +103,19 @@ LOG_FILE=/mnt/sd/native-linux-boot.log
 : > "${LOG_FILE}" || fail "could not create ${LOG_FILE}"
 log_state "microSD mounted"
 
-# Select rootfs image: support both Droidian and Alpine
+# Select rootfs image: support Arch, Alpine, and Droidian
 IS_DROIDIAN=0
-if [ -f /mnt/sd/droidian-rootfs.ext4 ]; then
-	ROOTFS_IMAGE=/mnt/sd/droidian-rootfs.ext4
-	IS_DROIDIAN=1
+if [ -f /mnt/sd/arch-rootfs.ext4 ]; then
+	ROOTFS_IMAGE=/mnt/sd/arch-rootfs.ext4
+	IS_DROIDIAN=0
 elif [ -f /mnt/sd/linux-rootfs.ext4 ]; then
 	ROOTFS_IMAGE=/mnt/sd/linux-rootfs.ext4
 	IS_DROIDIAN=0
+elif [ -f /mnt/sd/droidian-rootfs.ext4 ]; then
+	ROOTFS_IMAGE=/mnt/sd/droidian-rootfs.ext4
+	IS_DROIDIAN=1
 else
-	fail "no rootfs found on microSD (expected droidian-rootfs.ext4 or linux-rootfs.ext4)"
+	fail "no rootfs found on microSD (expected arch-rootfs.ext4, linux-rootfs.ext4, or droidian-rootfs.ext4)"
 fi
 
 log_state "rootfs image found: ${ROOTFS_IMAGE}"
@@ -206,9 +209,13 @@ fi
 LOG_FILE=/newroot/boot/native-linux-boot.log
 log_state "switch_root starting"
 INIT_BIN="/sbin/init"
-if [ ! -x "/newroot/sbin/init" ] && [ -x "/newroot/lib/systemd/systemd" ]; then
+if [ -x "/newroot/lib/systemd/systemd" ]; then
 	INIT_BIN="/lib/systemd/systemd"
-elif [ ! -x "/newroot/sbin/init" ] && [ -x "/newroot/bin/sh" ]; then
+elif [ -x "/newroot/usr/lib/systemd/systemd" ]; then
+	INIT_BIN="/usr/lib/systemd/systemd"
+elif [ -x "/newroot/sbin/init" ]; then
+	INIT_BIN="/sbin/init"
+elif [ -x "/newroot/bin/sh" ]; then
 	INIT_BIN="/bin/sh"
 fi
 
