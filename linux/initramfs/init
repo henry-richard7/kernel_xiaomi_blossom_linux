@@ -122,26 +122,35 @@ log_state "loop device attached"
 mount -t ext4 -o rw,noatime /dev/loop0 /newroot || fail "could not mount the ext4 rootfs image"
 log_state "rootfs mounted"
 
-# If booting Droidian, mount internal Android /vendor partition (read-only)
+# If booting Droidian, setup vendor partition, block symlinks, and container mounts
 if [ "${IS_DROIDIAN}" -eq 1 ]; then
-	echo "Droidian detected: mounting internal /vendor partition..." >/dev/console
-	mkdir -p /newroot/vendor
-	VENDOR_DEV=""
-	for u in /sys/class/block/mmcblk0p*/uevent; do
+	echo "Droidian detected: setting up Halium hardware environment..." >/dev/console
+
+	# 1. Create Android by-name block device symlinks
+	mkdir -p /dev/block/by-name /dev/block/bootdevice/by-name /dev/block/platform/bootdevice/by-name
+	for u in /sys/class/block/*/uevent; do
 		[ -f "$u" ] || continue
 		PARTNAME=""
 		DEVNAME=""
 		. "$u"
-		if [ "$PARTNAME" = "vendor" ]; then
-			VENDOR_DEV="/dev/${DEVNAME}"
-			break
+		if [ -n "$PARTNAME" ] && [ -n "$DEVNAME" ]; then
+			ln -sf "/dev/${DEVNAME}" "/dev/block/by-name/${PARTNAME}"
+			ln -sf "/dev/${DEVNAME}" "/dev/block/bootdevice/by-name/${PARTNAME}"
+			ln -sf "/dev/${DEVNAME}" "/dev/block/platform/bootdevice/by-name/${PARTNAME}"
 		fi
 	done
-	if [ -n "${VENDOR_DEV}" ] && [ -b "${VENDOR_DEV}" ]; then
-		mount -t ext4 -o ro "${VENDOR_DEV}" /newroot/vendor 2>/dev/null || \
-		mount -o ro "${VENDOR_DEV}" /newroot/vendor 2>/dev/null || \
-		echo "Warning: could not mount ${VENDOR_DEV} to /newroot/vendor" >/dev/console
+
+	# 2. Mount internal Android /vendor partition (read-only)
+	mkdir -p /newroot/vendor
+	if [ -b "/dev/block/by-name/vendor" ]; then
+		mount -t ext4 -o ro /dev/block/by-name/vendor /newroot/vendor 2>/dev/null || \
+		mount -o ro /dev/block/by-name/vendor /newroot/vendor 2>/dev/null || \
+		echo "Warning: could not mount /dev/block/by-name/vendor" >/dev/console
 	fi
+
+	# 3. Bind-mount /vendor into LXC Android container rootfs
+	mkdir -p /newroot/var/lib/lxc/android/rootfs/vendor
+	mount -o bind,ro /newroot/vendor /newroot/var/lib/lxc/android/rootfs/vendor 2>/dev/null || true
 fi
 
 if [ -d /lib/firmware ]; then
@@ -165,6 +174,25 @@ mount -o move /dev /newroot/dev || fail "could not move /dev"
 mount -o move /proc /newroot/proc || fail "could not move /proc"
 mount -o move /sys /newroot/sys || fail "could not move /sys"
 mount -o move /mnt/sd /newroot/boot || fail "could not move the microSD mount"
+
+# For Droidian: initialize binderfs and release UDC for usb-tethering
+if [ "${IS_DROIDIAN}" -eq 1 ]; then
+	mkdir -p /newroot/dev/binderfs
+	if mount -t binder binder /newroot/dev/binderfs 2>/dev/null; then
+		chmod 0755 /newroot/dev/binderfs 2>/dev/null || true
+		for b in binder hwbinder vndbinder; do
+			if [ -c "/newroot/dev/binderfs/${b}" ]; then
+				chmod 0666 "/newroot/dev/binderfs/${b}" 2>/dev/null || true
+				ln -sf "/dev/binderfs/${b}" "/newroot/dev/${b}"
+			fi
+		done
+	fi
+
+	# Release UDC so Droidian's usb-tethering service can claim it
+	if [ -d "/newroot/sys/kernel/config/usb_gadget/native-linux" ]; then
+		echo "" > "/newroot/sys/kernel/config/usb_gadget/native-linux/UDC" 2>/dev/null || true
+	fi
+fi
 
 LOG_FILE=/newroot/boot/native-linux-boot.log
 log_state "switch_root starting"
