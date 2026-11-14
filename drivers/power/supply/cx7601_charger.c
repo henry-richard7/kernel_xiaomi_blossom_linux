@@ -685,8 +685,10 @@ static int cx7601_set_hizmode(struct charger_device *chg_dev, bool enable)
 	else
 		ret = cx7601_exit_hiz_mode(bq);
 
-	pr_err("%s set hizmode %s\n", enable ? "enable" : "disable",
-				  !ret ? "successfully" : "failed");
+	if (ret)
+		pr_err("%s set hizmode failed: %d\n", enable ? "enable" : "disable", ret);
+	else
+		pr_debug("%s set hizmode successfully\n", enable ? "enable" : "disable");
 
 	return ret;
 }
@@ -702,8 +704,10 @@ static int cx7601_charging(struct charger_device *chg_dev, bool enable)
 	else
 		ret = cx7601_disable_charger(bq);
 	cx7601_set_hizmode(chg_dev, !enable);
-	pr_err("%s charger %s\n", enable ? "enable" : "disable",
-				  !ret ? "successfully" : "failed");
+	if (ret)
+		pr_err("%s charger failed: %d\n", enable ? "enable" : "disable", ret);
+	else
+		pr_debug("%s charger successfully\n", enable ? "enable" : "disable");
 
 	ret = cx7601_read_byte(bq, &val, CX7601_REG_01);
 	if (!ret  )

@@ -710,10 +710,12 @@ static int bq2560x_set_hizmode(struct charger_device *chg_dev, bool enable)
 
 	ret = bq2560x_read_byte(bq, &tmp, BQ2560X_REG_00);
 
-	pr_err("set hiz mode i2c  read reg 0x%02X is 0x%02X  ret :%d\n",BQ2560X_REG_00,tmp,ret);
+	pr_debug("set hiz mode i2c  read reg 0x%02X is 0x%02X  ret :%d\n",BQ2560X_REG_00,tmp,ret);
 
-	pr_err("%s set hizmode %s\n", enable ? "enable" : "disable",
-				  !ret ? "successfully" : "failed");
+	if (ret)
+		pr_err("%s set hizmode failed: %d\n", enable ? "enable" : "disable", ret);
+	else
+		pr_debug("%s set hizmode successfully\n", enable ? "enable" : "disable");
 
 	return ret;
 }
@@ -730,8 +732,10 @@ static int bq2560x_charging(struct charger_device *chg_dev, bool enable)
 		ret = bq2560x_disable_charger(bq);
 	bq2560x_set_hizmode(chg_dev, !enable);
 
-	pr_err("%s charger %s\n", enable ? "enable" : "disable",
-	       !ret ? "successfully" : "failed");
+	if (ret)
+		pr_err("%s charger failed: %d\n", enable ? "enable" : "disable", ret);
+	else
+		pr_debug("%s charger successfully\n", enable ? "enable" : "disable");
 
 	ret = bq2560x_read_byte(bq, &val, BQ2560X_REG_01);
 	if (!ret)

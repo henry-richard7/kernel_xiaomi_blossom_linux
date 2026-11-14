@@ -1581,8 +1581,10 @@ static int sgm41513_set_hiz_mode(struct charger_device *chg_dev, bool en)
     else
         ret = sgm41513_exit_hiz_mode(sgm);
 
-    pr_err("%s hiz mode %s\n", en ? "enable" : "disable",
-            !ret ? "successfully" : "failed");
+    if (ret)
+        pr_err("%s hiz mode failed: %d\n", en ? "enable" : "disable", ret);
+    else
+        pr_debug("%s hiz mode successfully\n", en ? "enable" : "disable");
 
     return ret;
 }
@@ -1599,7 +1601,7 @@ static int sgm41513_get_hiz_mode(struct charger_device *chg_dev)
     }
 
     ret = (val & REG00_ENHIZ_MASK) >> REG00_ENHIZ_SHIFT;
-    pr_err("%s:hiz mode %s\n",__func__, ret ? "enabled" : "disabled");
+    pr_debug("%s:hiz mode %s\n",__func__, ret ? "enabled" : "disabled");
 
     return ret;
 }
