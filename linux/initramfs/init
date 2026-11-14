@@ -1,0 +1,132 @@
+#!/bin/busybox sh
+
+PATH=/bin:/sbin
+export PATH
+
+# Install applet links before setup so the initramfs has the full BusyBox
+# toolbox even if a later mount or rootfs step fails.
+/bin/busybox --install -s /bin 2>/dev/null || true
+
+LOG_FILE=
+
+log_state() {
+	[ -n "${LOG_FILE}" ] || return 0
+	{
+		echo "=== ${1} ==="
+		echo "kernel command line:"
+		cat /proc/cmdline
+		echo "kernel log:"
+		dmesg
+	} >> "${LOG_FILE}" 2>&1
+	/bin/busybox sync
+}
+
+fail() {
+	echo "native-linux initramfs: $*" >/dev/console
+	echo "Kernel command line:" >/dev/console
+	cat /proc/cmdline >/dev/console 2>&1
+	echo "Recent kernel messages:" >/dev/console
+	dmesg | tail -n 40 >/dev/console 2>&1
+	if [ -n "${LOG_FILE}" ]; then
+		{
+			echo "=== failure: $* ==="
+			cat /proc/cmdline
+			dmesg
+		} >> "${LOG_FILE}" 2>&1
+		/bin/busybox sync
+	fi
+	if [ -c /dev/ttyGS0 ]; then
+		echo "Opening emergency shell on USB ACM (/dev/ttyGS0)." >/dev/console
+		exec /bin/busybox sh -i </dev/ttyGS0 >/dev/ttyGS0 2>&1
+	fi
+	echo "No USB ACM console; opening shell on the device console." >/dev/console
+	exec /bin/busybox sh
+}
+
+mount -t devtmpfs devtmpfs /dev || fail "could not mount devtmpfs"
+mount -t proc proc /proc || fail "could not mount proc"
+mount -t sysfs sysfs /sys || fail "could not mount sysfs"
+
+# console=ttyGS0 only selects a console; it does not create a USB gadget.
+# Bind an ACM function early so the host can capture boot output and reach
+# the emergency shell if storage or rootfs setup fails.
+USB_GADGET=/sys/kernel/config/usb_gadget/native-linux
+USB_GADGET_READY=0
+mkdir -p /sys/kernel/config
+if mount -t configfs none /sys/kernel/config 2>/dev/null; then
+	mkdir -p "${USB_GADGET}"
+	if [ -d "${USB_GADGET}" ]; then
+		printf "0x2717" > "${USB_GADGET}/idVendor" 2>/dev/null || true
+		printf "0xff40" > "${USB_GADGET}/idProduct" 2>/dev/null || true
+		printf "0x0100" > "${USB_GADGET}/bcdDevice" 2>/dev/null || true
+		printf "0x0200" > "${USB_GADGET}/bcdUSB" 2>/dev/null || true
+		mkdir -p "${USB_GADGET}/strings/0x409" \
+			"${USB_GADGET}/configs/c.1/strings/0x409" \
+			"${USB_GADGET}/functions/acm.usb0"
+		printf "Xiaomi" > "${USB_GADGET}/strings/0x409/manufacturer" 2>/dev/null || true
+		printf "Redmi 9A Linux" > "${USB_GADGET}/strings/0x409/product" 2>/dev/null || true
+		printf "dandelion" > "${USB_GADGET}/strings/0x409/serialnumber" 2>/dev/null || true
+		printf "USB ACM console" > "${USB_GADGET}/configs/c.1/strings/0x409/configuration" 2>/dev/null || true
+		ln -s "${USB_GADGET}/functions/acm.usb0" "${USB_GADGET}/configs/c.1/acm.usb0" 2>/dev/null || true
+		for udc in /sys/class/udc/*; do
+			[ -e "${udc}" ] || continue
+			if printf "%s" "${udc##*/}" > "${USB_GADGET}/UDC" 2>/dev/null; then
+				USB_GADGET_READY=1
+				echo "USB ACM gadget bound to ${udc##*/}" >/dev/console
+				break
+			fi
+		done
+	fi
+fi
+[ "${USB_GADGET_READY}" -eq 1 ] || echo "USB ACM gadget did not bind; check UDC/USB controller initialization." >/dev/console
+
+mkdir -p /mnt/sd /newroot || fail "could not create mount points"
+
+SD_PARTITION=/dev/mmcblk1p1
+ROOTFS_IMAGE=/mnt/sd/linux-rootfs.ext4
+
+attempt=0
+while [ ! -b "${SD_PARTITION}" ] && [ "${attempt}" -lt 12 ]; do
+	sleep 1
+	attempt=$((attempt + 1))
+done
+
+[ -b "${SD_PARTITION}" ] || fail "microSD partition ${SD_PARTITION} did not appear"
+mount -t vfat -o rw "${SD_PARTITION}" /mnt/sd || fail "could not mount the microSD FAT32 partition"
+LOG_FILE=/mnt/sd/native-linux-boot.log
+: > "${LOG_FILE}" || fail "could not create ${LOG_FILE}"
+log_state "microSD mounted"
+[ -f "${ROOTFS_IMAGE}" ] || fail "missing ${ROOTFS_IMAGE}"
+log_state "rootfs image found"
+
+losetup /dev/loop0 "${ROOTFS_IMAGE}" || fail "could not attach the ext4 rootfs image"
+log_state "loop device attached"
+mount -t ext4 -o rw,noatime /dev/loop0 /newroot || fail "could not mount the ext4 rootfs image"
+log_state "rootfs mounted"
+
+if [ -d /lib/firmware ]; then
+	mkdir -p /newroot/lib/firmware
+	cp -an /lib/firmware/* /newroot/lib/firmware/ 2>/dev/null || true
+fi
+
+# Enable automatic root shell on tty1 (phone screen) and ttyGS0 (USB serial)
+if [ -f /newroot/etc/inittab ]; then
+	sed -i 's/^[a-zA-Z0-9_]*:.*getty/#&/' /newroot/etc/inittab
+	sed -i '/::respawn:\/bin\/sh/d' /newroot/etc/inittab
+	sed -i '/::respawn:\/sbin\/getty/d' /newroot/etc/inittab
+	echo "tty1::respawn:/bin/sh -l" >> /newroot/etc/inittab
+	echo "ttyGS0::respawn:/bin/sh -l" >> /newroot/etc/inittab
+fi
+rm -f /newroot/etc/runlevels/*/agetty* /newroot/etc/runlevels/*/getty* 2>/dev/null || true
+
+mkdir -p /newroot/dev /newroot/proc /newroot/sys /newroot/run /newroot/boot ||
+	fail "could not prepare Linux mount points"
+mount -o move /dev /newroot/dev || fail "could not move /dev"
+mount -o move /proc /newroot/proc || fail "could not move /proc"
+mount -o move /sys /newroot/sys || fail "could not move /sys"
+mount -o move /mnt/sd /newroot/boot || fail "could not move the microSD mount"
+
+LOG_FILE=/newroot/boot/native-linux-boot.log
+log_state "switch_root starting"
+exec switch_root /newroot /sbin/init
+fail "switch_root returned unexpectedly"
