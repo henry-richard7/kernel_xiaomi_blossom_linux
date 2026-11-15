@@ -39,30 +39,28 @@ int do_connectivity_driver_init(int chip_id)
 
 	tmp_ret = do_common_drv_init(chip_id);
 	i_ret += tmp_ret;
-	if (tmp_ret) {
-		WMT_DETECT_PR_ERR("do common driver not ready, ret:%d\n abort!\n", tmp_ret);
-		return i_ret;
-	}
+	if (tmp_ret)
+		WMT_DETECT_PR_WARN("do common driver init warning, ret:%d\n", tmp_ret);
 
 	tmp_ret = do_bluetooth_drv_init(chip_id);
 	i_ret += tmp_ret;
 	if (tmp_ret)
-		WMT_DETECT_PR_ERR("do common driver init failed, ret:%d\n", tmp_ret);
+		WMT_DETECT_PR_WARN("do bluetooth driver init ret:%d\n", tmp_ret);
 
 	tmp_ret = do_gps_drv_init(chip_id);
 	i_ret += tmp_ret;
 	if (tmp_ret)
-		WMT_DETECT_PR_ERR("do common driver init failed, ret:%d\n", tmp_ret);
+		WMT_DETECT_PR_WARN("do gps driver init ret:%d\n", tmp_ret);
 
 	tmp_ret = do_fm_drv_init(chip_id);
 	i_ret += tmp_ret;
 	if (tmp_ret)
-		WMT_DETECT_PR_ERR("do fm module init failed, ret:%d\n", tmp_ret);
+		WMT_DETECT_PR_WARN("do fm module init ret:%d\n", tmp_ret);
 
 	tmp_ret = do_wlan_drv_init(chip_id);
 	i_ret += tmp_ret;
 	if (tmp_ret)
-		WMT_DETECT_PR_ERR("do wlan module init failed, ret:%d\n", tmp_ret);
+		WMT_DETECT_PR_WARN("do wlan module init ret:%d\n", tmp_ret);
 
 	return i_ret;
 }

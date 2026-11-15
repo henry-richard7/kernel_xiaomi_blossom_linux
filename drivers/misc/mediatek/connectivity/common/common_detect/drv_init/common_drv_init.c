@@ -31,10 +31,12 @@ int do_common_drv_init(int chip_id)
 
 	wmt_detect_set_chip_type(chip_id);
 
-	/* HIF-SDIO driver init */
-	i_ret_tmp = mtk_wcn_hif_sdio_drv_init();
-	i_ret += i_ret_tmp;
-	WMT_DETECT_PR_DBG("HIF-SDIO driver init, i_ret:%d\n", i_ret);
+	if (wmt_detect_get_chip_type() == WMT_CHIP_TYPE_COMBO) {
+		/* HIF-SDIO driver init */
+		i_ret_tmp = mtk_wcn_hif_sdio_drv_init();
+		i_ret += i_ret_tmp;
+		WMT_DETECT_PR_DBG("HIF-SDIO driver init, i_ret:%d\n", i_ret);
+	}
 
 	/* WMT driver init */
 	i_ret_tmp = mtk_wcn_common_drv_init();
@@ -46,10 +48,12 @@ int do_common_drv_init(int chip_id)
 	i_ret += i_ret_tmp;
 	WMT_DETECT_PR_DBG("STP-UART driver init, i_ret:%d\n", i_ret);
 
-	/* STP-SDIO driver init */
-	i_ret_tmp = mtk_wcn_stp_sdio_drv_init();
-	i_ret += i_ret_tmp;
-	WMT_DETECT_PR_DBG("STP-SDIO driver init, i_ret:%d\n", i_ret);
+	if (wmt_detect_get_chip_type() == WMT_CHIP_TYPE_COMBO) {
+		/* STP-SDIO driver init */
+		i_ret_tmp = mtk_wcn_stp_sdio_drv_init();
+		i_ret += i_ret_tmp;
+		WMT_DETECT_PR_DBG("STP-SDIO driver init, i_ret:%d\n", i_ret);
+	}
 
 	WMT_DETECT_PR_INFO("common driver init finish:%d\n", i_ret);
 	return i_ret;

@@ -182,6 +182,10 @@ rm -f /newroot/etc/runlevels/*/agetty* /newroot/etc/runlevels/*/getty* 2>/dev/nu
 
 # Silence OpenRC /lib/modules missing warning
 mkdir -p /newroot/lib/modules/4.19.325-cip136-st8-linux-unified
+touch /newroot/lib/modules/4.19.325-cip136-st8-linux-unified/modules.dep \
+      /newroot/lib/modules/4.19.325-cip136-st8-linux-unified/modules.alias \
+      /newroot/lib/modules/4.19.325-cip136-st8-linux-unified/modules.symbols \
+      /newroot/lib/modules/4.19.325-cip136-st8-linux-unified/modules.builtin 2>/dev/null || true
 
 # Ensure MTK connectivity device nodes exist in /dev
 for cdev in wmtWifi stpwmt wmtdetect stpbt stpgps; do
