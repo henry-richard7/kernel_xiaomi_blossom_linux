@@ -784,9 +784,15 @@ static INT32 wmt_core_stp_init(VOID)
 	if (pWmtGenConf == NULL)
 		WMT_ERR_FUNC("WMT-CORE: wmt_conf_get_cfg return NULL!!\n");
 	if (!(pctx->wmtInfoBit & WMT_OP_HIF_BIT)) {
-		WMT_ERR_FUNC("WMT-CORE: no hif info!\n");
-		osal_assert(0);
-		return -WMT_ERRCODE_NO_HIF_INFO;
+		WMT_INFO_FUNC("WMT-CORE: auto-configuring default SoC HIF info for native Linux\n");
+		pctx->wmtInfoBit |= WMT_OP_HIF_BIT;
+		pctx->wmtHifConf.hifType = WMT_HIF_UART;
+		pctx->wmtHifConf.uartFcCtrl = 0;
+		pctx->wmtHifConf.au4HifConf[0] = 0;
+		pctx->wmtHifConf.au4HifConf[1] = 0;
+		pctx->wmtHifConf.au4StrapConf[0] = WMT_FM_COMM;
+		mtk_wcn_stp_set_if_tx_type(STP_UART_IF_TX);
+		wmt_plat_set_comm_if_type(STP_UART_IF_TX);
 	}
 
 	/* 4 <0> turn on SDIO2 for common SDIO */
