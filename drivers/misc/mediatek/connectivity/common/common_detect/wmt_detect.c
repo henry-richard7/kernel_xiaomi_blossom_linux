@@ -340,14 +340,6 @@ static int wmt_detect_driver_init(void)
 
 	WMT_DETECT_PR_INFO("driver(major %d) installed success\n", gWmtDetectMajor);
 
-#if (MTK_WCN_REMOVE_KO)
-	WMT_DETECT_PR_INFO("native Linux: auto-initializing connectivity drivers for MT6765...\n");
-	sdio_detect_exit();
-	mtk_wcn_wmt_set_chipid(0x6765);
-	wmt_detect_set_chip_type(0x6765);
-	do_connectivity_driver_init(0x6765);
-#endif
-
 	return 0;
 
 err2:

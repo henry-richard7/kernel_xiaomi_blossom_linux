@@ -1671,8 +1671,6 @@ static INT32 WMT_init(VOID)
 
 #if (MTK_WCN_REMOVE_KO)
 	/* called in do_common_drv_init() */
-	wmt_lib_set_hif(0x21);
-	hif_info = 1;
 #else
 	mtk_wcn_stp_uart_drv_init();
 	mtk_wcn_stp_sdio_drv_init();
