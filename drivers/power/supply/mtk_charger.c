@@ -1573,7 +1573,7 @@ static void kpoc_power_off_check(struct mtk_charger *info)
 	return;
 }
 
-static char *dump_charger_type(int type)
+static __maybe_unused char *dump_charger_type(int type)
 {
 	switch (type) {
 	case POWER_SUPPLY_TYPE_UNKNOWN:

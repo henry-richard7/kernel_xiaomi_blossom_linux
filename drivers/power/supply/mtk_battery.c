@@ -283,8 +283,10 @@ static int battery_psy_get_property(struct power_supply *psy,
 	gm = (struct mtk_battery *)power_supply_get_drvdata(psy);
 	bs_data = &gm->bs_data;
 
-	if (gm->algo.active == true)
-		bs_data->bat_capacity = gm->ui_soc;
+	if (gm->algo.active == true) {
+		if (gm->ui_soc > 0 && gm->ui_soc <= 100)
+			bs_data->bat_capacity = gm->ui_soc;
+	}
 
 	switch (psp) {
 	case POWER_SUPPLY_PROP_STATUS:
@@ -355,10 +357,13 @@ static int battery_psy_get_property(struct power_supply *psy,
 			}
 			pr_debug("MTK_BATTERY: cap=%d ui_soc=%d vbat=%d raw_soc=%d active=%d\n",
 				cap, gm->ui_soc, vbat, raw_soc, gm->algo.active);
-			if (cap < 0 || cap > 100) {
+			if (cap <= 0 || cap > 100) {
 				cap = raw_soc;
-				if (cap < 0 || cap > 100)
+				if (cap <= 0 || cap > 100)
 					cap = 50;
+				gm->ui_soc = cap;
+				bs_data->bat_capacity = cap;
+				gm->algo.ui_soc = cap * 100;
 			}
 			val->intval = cap;
 		}

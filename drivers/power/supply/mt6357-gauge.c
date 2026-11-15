@@ -2148,6 +2148,9 @@ static int hw_version_get(struct mtk_gauge *gauge,
 	return 0;
 }
 
+static int ptim_battery_voltage_get(struct mtk_gauge *gauge,
+	struct mtk_gauge_sysfs_field_info *attr, int *val);
+
 static int rtc_ui_soc_get(struct mtk_gauge *gauge,
 	struct mtk_gauge_sysfs_field_info *attr, int *val)
 {
@@ -2173,9 +2176,24 @@ static int rtc_ui_soc_set(struct mtk_gauge *gauge,
 	u8 spare3_reg = get_rtc_spare_fg_value(gauge);
 	int spare3_reg_valid = 0;
 	int new_spare3_reg = 0;
+	int vbat = 0;
+
+	/* Never write 0% or negative SoC to PMIC RTC spare3 if battery voltage is healthy (> 3400 mV).
+	 * Writing 0 causes Little Kernel (LK) to trigger low-battery lockout on the next boot!
+	 */
+	if (val <= 0) {
+		ptim_battery_voltage_get(gauge, NULL, &vbat);
+		if (vbat > 3400 || vbat <= 0) {
+			val = 50;
+			bm_err("[%s] guarded against 0%% RTC write! vbat=%d, setting safe val=%d\n",
+				__func__, vbat, val);
+		}
+	}
 
 	spare3_reg_valid = (spare3_reg & 0x80);
-	new_spare3_reg = spare3_reg_valid + val;
+	if (!spare3_reg_valid)
+		spare3_reg_valid = 0x80;
+	new_spare3_reg = spare3_reg_valid + (val & 0x7f);
 
 	set_rtc_spare_fg_value(gauge, new_spare3_reg);
 

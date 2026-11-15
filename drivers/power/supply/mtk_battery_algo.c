@@ -1397,8 +1397,15 @@ void fgr_int_end_flow(struct mtk_battery *gm, unsigned int intr_no)
 
 	set_kernel_soc(gm, algo->soc);
 	battery_set_property(BAT_PROP_UISOC, algo->ui_soc);
-	gauge_set_property(GAUGE_PROP_RTC_UI_SOC,
-		(algo->ui_soc + 50) / 100);
+	{
+		int rtc_soc = (algo->ui_soc + 50) / 100;
+		int vbat_mv = gauge_get_int_property(GAUGE_PROP_BATTERY_VOLTAGE);
+		if (vbat_mv > 10000)
+			vbat_mv /= 1000;
+		if (rtc_soc <= 0 && vbat_mv > 3400)
+			rtc_soc = 50;
+		gauge_set_property(GAUGE_PROP_RTC_UI_SOC, rtc_soc);
+	}
 
 	if (algo->soc <= 100)
 		gauge_set_property(GAUGE_PROP_CON0_SOC, 100);
@@ -1780,8 +1787,15 @@ void fgr_set_int1(struct mtk_battery *gm)
 
 	set_kernel_soc(gm, algo->soc);
 	battery_set_property(BAT_PROP_UISOC, algo->ui_soc);
-	gauge_set_property(GAUGE_PROP_RTC_UI_SOC,
-		(algo->ui_soc + 50) / 100);
+	{
+		int rtc_soc = (algo->ui_soc + 50) / 100;
+		int vbat_mv = gauge_get_int_property(GAUGE_PROP_BATTERY_VOLTAGE);
+		if (vbat_mv > 10000)
+			vbat_mv /= 1000;
+		if (rtc_soc <= 0 && vbat_mv > 3400)
+			rtc_soc = 50;
+		gauge_set_property(GAUGE_PROP_RTC_UI_SOC, rtc_soc);
+	}
 
 	if (algo->soc <= 100)
 		gauge_set_property(GAUGE_PROP_CON0_SOC, 100);
