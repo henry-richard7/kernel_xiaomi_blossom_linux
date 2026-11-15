@@ -484,12 +484,8 @@ static int rtc_pm_event(struct notifier_block *notifier, unsigned long pm_event,
 
 static void rtc_mark_kpoc(struct mt6397_rtc *rtc)
 {
-	pr_notice("%s\n", __func__);
-
-	mutex_lock(&rtc->lock);
-	regmap_field_write(rtc->spare[SPARE_KPOC], 1);
-	mtk_rtc_write_trigger(rtc);
-	mutex_unlock(&rtc->lock);
+	/* Suppressed on native Linux to avoid trapping LK in KPOC charging loop */
+	dev_info(rtc->dev, "%s: suppressed for native Linux\n", __func__);
 }
 
 static void mtk_rtc_work_queue(struct work_struct *work)
@@ -1556,9 +1552,18 @@ static int mtk_rtc_probe(struct platform_device *pdev)
 		goto out_free_irq;
 	}
 
-	if (rtc->dev_comp->spare_reg_fields)
+	if (rtc->dev_comp->spare_reg_fields) {
 		if (mtk_rtc_set_spare(&pdev->dev))
 			dev_err(&pdev->dev, "spare is not supported\n");
+		else if (rtc->spare[SPARE_KPOC]) {
+			/* Clear SPARE_KPOC flag so LK never traps device in charger-loop */
+			mutex_lock(&rtc->lock);
+			regmap_field_write(rtc->spare[SPARE_KPOC], 0);
+			mtk_rtc_write_trigger(rtc);
+			mutex_unlock(&rtc->lock);
+			dev_info(&pdev->dev, "%s: cleared SPARE_KPOC flag to prevent LK charger-loop\n", __func__);
+		}
+	}
 
 	if (rtc->dev_comp->cali_reg_fields)
 		if (mtk_rtc_config_eosc_cali(&pdev->dev))
@@ -1583,7 +1588,15 @@ static int mtk_rtc_probe(struct platform_device *pdev)
 		else {
 			dev_notice(&pdev->dev,
 				"%s, bootmode:%d\n", __func__, tag->bootmode);
-			bootmode = tag->bootmode;
+			if (tag->bootmode == KERNEL_POWER_OFF_CHARGING_BOOT ||
+			    tag->bootmode == LOW_POWER_OFF_CHARGING_BOOT) {
+				dev_notice(&pdev->dev,
+					"%s: override KPOC bootmode %d -> NORMAL_BOOT for native Linux\n",
+					__func__, tag->bootmode);
+				bootmode = NORMAL_BOOT;
+			} else {
+				bootmode = tag->bootmode;
+			}
 		}
 	}
 

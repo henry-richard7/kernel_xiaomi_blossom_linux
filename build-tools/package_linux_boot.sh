@@ -7,12 +7,6 @@ DEFAULT_STOCK="/home/henry/Redmi-9A-Mods/Backups/stock-boot.img"
 STOCK_BOOT="${1:-${DEFAULT_STOCK}}"
 OUTPUT_IMAGE="${2:-${OUT_DIR}/boot-linux.img}"
 
-if [ ! -f "${STOCK_BOOT}" ]; then
-	echo "Usage: package_linux_boot.sh [STOCK_BOOT_IMAGE] [OUTPUT_IMAGE]" >&2
-	echo "Stock boot image not found at: ${STOCK_BOOT}" >&2
-	exit 1
-fi
-
 [[ -f "${OUT_DIR}/arch/arm64/boot/Image.gz" ]] || {
 	echo "Missing Linux kernel image; run build-tools/compile_linux.sh first." >&2
 	exit 1
@@ -26,7 +20,11 @@ mkdir -p "$(dirname "${OUTPUT_IMAGE}")"
 STOCK_DTB="${OUT_DIR}/stock-boot.dtb"
 BOOT_METADATA="${OUT_DIR}/stock-boot-metadata.txt"
 
-python3 - "${STOCK_BOOT}" "${STOCK_DTB}" "${BOOT_METADATA}" <<'PY'
+if [ -f "${STOCK_DTB}" ] && [ -f "${BOOT_METADATA}" ]; then
+	echo "[*] Using cached stock DTB and metadata from ${OUT_DIR}"
+elif [ -f "${STOCK_BOOT}" ]; then
+	echo "[*] Extracting stock DTB and metadata from ${STOCK_BOOT}"
+	python3 - "${STOCK_BOOT}" "${STOCK_DTB}" "${BOOT_METADATA}" <<'PY'
 import struct
 import re
 import sys
@@ -83,6 +81,10 @@ with open(metadata_path, "w", encoding="utf-8") as out:
     out.write(f"{major}.{minor}.{patch}\n{year:04d}-{month:02d}\n")
 print(f"Extracted stock DTB ({dtb_size} bytes) from offset {dtb_offset}")
 PY
+else
+	echo "Stock boot image not found at: ${STOCK_BOOT} and no cached DTB in ${OUT_DIR}" >&2
+	exit 1
+fi
 
 mapfile -t META < "${BOOT_METADATA}"
 BASE=0x40000000

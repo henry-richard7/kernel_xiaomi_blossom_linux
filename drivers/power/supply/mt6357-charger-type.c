@@ -584,14 +584,7 @@ static void do_charger_detection_work(struct work_struct *data)
 		/* 8 = KERNEL_POWER_OFF_CHARGING_BOOT */
 		/* 9 = LOW_POWER_OFF_CHARGING_BOOT */
 		if (info->bootmode == 8 || info->bootmode == 9) {
-			pr_info("%s: Unplug Charger/USB\n", __func__);
-
-#ifndef CONFIG_TCPC_CLASS
-			pr_info("%s: system_state=%d\n", __func__,
-				system_state);
-			if (system_state != SYSTEM_POWER_OFF)
-				kernel_power_off();
-#endif
+			pr_info("%s: Unplug Charger/USB (KPOC shutdown suppressed for native Linux)\n", __func__);
 		}
 	}
 }
@@ -611,14 +604,7 @@ irqreturn_t chrdet_int_handler(int irq, void *data)
 		/* 8 = KERNEL_POWER_OFF_CHARGING_BOOT */
 		/* 9 = LOW_POWER_OFF_CHARGING_BOOT */
 		if (info->bootmode == 8 || info->bootmode == 9) {
-			pr_info("%s: Unplug Charger/USB\n", __func__);
-
-#ifndef CONFIG_TCPC_CLASS
-			pr_info("%s: system_state=%d\n", __func__,
-				system_state);
-			if (system_state != SYSTEM_POWER_OFF)
-				kernel_power_off();
-#endif
+			pr_info("%s: Unplug Charger/USB (KPOC shutdown suppressed for native Linux)\n", __func__);
 		}
 	}
 	pr_notice("%s: chrdet:%d\n", __func__, chrdet);
@@ -776,7 +762,13 @@ static int check_boot_mode(struct mtk_charger_type *info, struct device *dev)
 			pr_notice("%s: size:0x%x tag:0x%x bootmode:0x%x boottype:0x%x\n",
 				__func__, tag->size, tag->tag,
 				tag->bootmode, tag->boottype);
-			info->bootmode = tag->bootmode;
+			if (tag->bootmode == 8 || tag->bootmode == 9) {
+				pr_notice("%s: override KPOC bootmode %d -> NORMAL_BOOT (0) for native Linux\n",
+					__func__, tag->bootmode);
+				info->bootmode = 0; /* NORMAL_BOOT */
+			} else {
+				info->bootmode = tag->bootmode;
+			}
 			info->boottype = tag->boottype;
 		}
 	}

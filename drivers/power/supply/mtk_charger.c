@@ -165,7 +165,13 @@ static void mtk_charger_parse_dt(struct mtk_charger *info,
 			chr_err("%s: size:0x%x tag:0x%x bootmode:0x%x boottype:0x%x\n",
 				__func__, tag->size, tag->tag,
 				tag->bootmode, tag->boottype);
-			info->bootmode = tag->bootmode;
+			if (tag->bootmode == 8 || tag->bootmode == 9) {
+				chr_err("%s: override KPOC bootmode %d -> NORMAL_BOOT (0) for native Linux\n",
+					__func__, tag->bootmode);
+				info->bootmode = 0; /* NORMAL_BOOT */
+			} else {
+				info->bootmode = tag->bootmode;
+			}
 			info->boottype = tag->boottype;
 		}
 	}
@@ -1563,18 +1569,8 @@ static bool mtk_is_charger_on(struct mtk_charger *info)
 
 static void kpoc_power_off_check(struct mtk_charger *info)
 {
-	unsigned int boot_mode = info->bootmode;
-	int vbus = 0;
-
-	/* 8 = KERNEL_POWER_OFF_CHARGING_BOOT */
-	/* 9 = LOW_POWER_OFF_CHARGING_BOOT */
-	if (boot_mode == 8 || boot_mode == 9) {
-		vbus = get_vbus(info);
-		if (vbus >= 0 && vbus < 2500 && !mtk_is_charger_on(info) && !info->pd_reset) {
-			chr_err("Unplug Charger/USB in KPOC mode, vbus=%d, shutdown\n", vbus);
-			kernel_power_off();
-		}
-	}
+	/* On native Linux, do NOT shutdown when charger is unplugged */
+	return;
 }
 
 static char *dump_charger_type(int type)

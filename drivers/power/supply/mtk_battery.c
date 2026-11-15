@@ -202,18 +202,6 @@ bool is_recovery_mode(void)
 
 bool is_kernel_power_off_charging(void)
 {
-	struct mtk_battery *gm;
-
-	gm = get_mtk_battery();
-	if (!gm)
-		return false;
-
-	bm_debug("%s: bootmode = %d\n", __func__, gm->bootmode);
-
-	/* KERNEL_POWER_OFF_CHARGING_BOOT */
-	if (gm->bootmode == 8)
-		return true;
-
 	return false;
 }
 
@@ -3122,7 +3110,13 @@ void fg_check_bootmode(struct device *dev,
 			bm_err("%s: size:0x%x tag:0x%x bootmode:0x%x boottype:0x%x\n",
 				__func__, tag->size, tag->tag,
 				tag->bootmode, tag->boottype);
-			gm->bootmode = tag->bootmode;
+			if (tag->bootmode == 8 || tag->bootmode == 9) {
+				bm_err("%s: override KPOC bootmode %d -> NORMAL_BOOT (0) for native Linux\n",
+					__func__, tag->bootmode);
+				gm->bootmode = 0; /* NORMAL_BOOT */
+			} else {
+				gm->bootmode = tag->bootmode;
+			}
 			gm->boottype = tag->boottype;
 		}
 	}
