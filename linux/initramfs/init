@@ -103,19 +103,16 @@ LOG_FILE=/mnt/sd/native-linux-boot.log
 : > "${LOG_FILE}" || fail "could not create ${LOG_FILE}"
 log_state "microSD mounted"
 
-# Select rootfs image: support Alpine, Arch, and Droidian
+# Select rootfs image: support Alpine (linux-rootfs.ext4) and Droidian (droidian-rootfs.ext4)
 IS_DROIDIAN=0
 if [ -f /mnt/sd/linux-rootfs.ext4 ]; then
 	ROOTFS_IMAGE=/mnt/sd/linux-rootfs.ext4
-	IS_DROIDIAN=0
-elif [ -f /mnt/sd/arch-rootfs.ext4 ]; then
-	ROOTFS_IMAGE=/mnt/sd/arch-rootfs.ext4
 	IS_DROIDIAN=0
 elif [ -f /mnt/sd/droidian-rootfs.ext4 ]; then
 	ROOTFS_IMAGE=/mnt/sd/droidian-rootfs.ext4
 	IS_DROIDIAN=1
 else
-	fail "no rootfs found on microSD (expected linux-rootfs.ext4, arch-rootfs.ext4, or droidian-rootfs.ext4)"
+	fail "no rootfs found on microSD (expected linux-rootfs.ext4 or droidian-rootfs.ext4)"
 fi
 
 log_state "rootfs image found: ${ROOTFS_IMAGE}"
