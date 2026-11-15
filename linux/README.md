@@ -1,50 +1,112 @@
-# Redmi 9A native Linux bring-up
+# Native Alpine Linux on Xiaomi Redmi 9A (blossom / dandelion)
 
-The first-boot initramfs mounts the phone's microSD partition `/dev/mmcblk1p1`
-as FAT32, attaches `/linux-rootfs.ext4` as a loop device, mounts that ext4
-filesystem, then starts `/sbin/init` from it. The ext4 image must be smaller
-than 4 GiB because the current card is FAT32. The current rootfs is the 512 MiB
-Alpine image from Alpican 4.1.
+Native GNU/Linux port for the Xiaomi Redmi 9A (MediaTek Helio G25 / MT6765 / MT6762G), booting directly into Alpine Linux from an external microSD card without modifying or endangering internal Android eMMC partitions.
 
-Build the initramfs with:
+---
 
+## Hardware Support & Status
+
+| Subsystem | Driver / Mechanism | Status | Notes |
+| :--- | :--- | :--- | :--- |
+| **CPU / SoC** | MediaTek MT6765 (Helio G25) 8x Cortex-A53 | **Working** | Full multicore support |
+| **Display** | SimpleFB / Framebuffer (`/dev/fb0`) | **Working** | 720 × 1600 resolution |
+| **Touchscreen** | Novatek TS (`novatek_ts_djn_fw.bin`) | **Working** | Firmware embedded into kernel & ramdisk |
+| **Internal Wi-Fi** | MediaTek `wmt-wifi` / `wmt-pyloader` (`wlan0`) | **Working** | Loads MTK combo firmware & connects on boot |
+| **USB Tethering** | Linux ConfigFS RNDIS (`usb0`) | **Working** | Managed via `/usr/local/bin/usb-tether` |
+| **USB Serial Console** | Linux ConfigFS ACM (`ttyGS0`) | **Working** | Root shell on `/dev/ttyACM*` on PC |
+| **Direct Screen Shell** | OpenRC autologin on `/dev/tty1` | **Working** | Root prompt directly on phone display |
+| **Battery / PMIC** | Stock MTK Power Supply & Charger | **Working** | Battery percentage & charging active |
+| **Backlight Control** | MediaTek LCD Backlight (`lcd-backlight`) | **Working** | Controlled via `brightnessctl` |
+| **External USB Wi-Fi** | `ath9k_htc` & `rtl8822bu` | **Working** | Built-in kernel drivers |
+| **External USB BT** | `btusb` (Realtek RTL8761BU / TP-Link UB500) | **Working** | Built-in kernel drivers |
+| **Storage** | MicroSD (`/dev/mmcblk1p1` -> `linux-rootfs.ext4` loop) | **Working** | Safe, isolated non-destructive boot |
+
+---
+
+## Quick Start / Build Guide
+
+The project provides a top-level unified build script: [`./build.sh`](file:///media/primaryHdd/Coding/Android/kernel_xiaomi_blossom_linux/build.sh).
+
+### 1. Build the Boot Image
 ```bash
-bash build-tools/build_linux_ramdisk.sh
+./build.sh boot
 ```
+* Automatically compiles the Linux kernel (`out-linux/arch/arm64/boot/Image.gz`) if not already built.
+* Generates the initramfs (`out-linux/initramfs.cpio.gz`).
+* Extracts the stock DTB and metadata from your stock boot backup.
+* Repacks and outputs [`out-linux/boot-linux.img`](file:///media/primaryHdd/Coding/Android/kernel_xiaomi_blossom_linux/out-linux/boot-linux.img).
 
-The builder extracts the rootfs's ARM64 BusyBox and musl loader with `debugfs`,
-so the initramfs uses the same userspace as the rootfs.
+### 2. Available Build Subcommands
+* **`./build.sh kernel`**: Compiles kernel image and device trees using `blossom_linux_defconfig`.
+* **`./build.sh ramdisk`**: Rebuilds the native initramfs.
+* **`./build.sh rootfs`**: Generates the 5 GiB Alpine Linux ext4 rootfs image.
+* **`./build.sh all`**: Builds kernel, ramdisk, boot image, and rootfs in one go.
+* **`./build.sh flash`**: Flashes `out-linux/boot-linux.img` via fastboot.
+* **`./build.sh console`**: Connects to the phone's live USB ACM serial console.
+* **`./build.sh clean`**: Cleans intermediate build objects.
 
-The generated archive is `out-linux/initramfs.cpio.gz`. The boot image still
-can be repacked with the Linux kernel and this ramdisk using the stock boot
-image as a metadata/DTB source:
+---
 
-```bash
-bash build-tools/package_linux_boot.sh /path/to/stock-boot.img
-```
+## MicroSD Card Setup & Booting
 
-The result is `out-linux/boot-linux.img`. The packaging step keeps the stock
-header addresses and board DTB, preserves the stock command line arguments,
-then sets `init=/init` and enables kernel log output. It only creates a local
-file; it does not flash the phone. Copy `out-linux/linux-rootfs.ext4` to the microSD root as
-`linux-rootfs.ext4` before a boot attempt. This setup does not format or
-repartition the card.
+1. Format your microSD card's first partition (`/dev/mmcblk1p1`) as **FAT32** or **ext4**.
+2. Copy the generated `linux-rootfs.ext4` to the root of the microSD card:
+   ```bash
+   cp /media/primaryHdd/Coding/Android/alpine-rootfs/linux-rootfs.ext4 /path/to/microsd/
+   ```
+3. Put the phone into Fastboot mode (**Hold Volume Down + Power**).
+4. Flash the boot image:
+   ```bash
+   fastboot flash boot out-linux/boot-linux.img
+   fastboot reboot
+   ```
 
-## Wireless adapters
+---
 
-The native Linux defconfig enables the MT6765 combo Wi-Fi/Bluetooth drivers
-used by the phone. It also enables the in-tree RTL8812BU/RTL8822BU USB Wi-Fi
-driver, including TP-Link `2357:0115` adapters such as the Archer T4U V3.
-USB Bluetooth uses `btusb`; this tree includes support for the TP-Link UB500
-(`2357:0604`, Realtek RTL8761BU).
+## Key On-Device Commands (Inside Alpine Linux)
 
-Install the Bluetooth firmware in Alpine's root filesystem before using the
-UB500:
+### Wi-Fi (`wlan0`)
+Wi-Fi starts and connects automatically on boot. If you need to reconfigure:
+* Scan networks:
+  ```sh
+  iw dev wlan0 scan
+  ```
+* Add credentials:
+  ```sh
+  wpa_passphrase "SSID" "PASSWORD" >> /etc/wpa_supplicant/wpa_supplicant.conf
+  rc-service wpa_supplicant restart
+  ```
 
+### USB Tethering (`usb-tether`)
+Share your PC's internet with the phone over USB (or vice versa):
 ```sh
-apk add linux-firmware-rtl_bt
+usb-tether on
+udhcpc -i usb0
+```
+To disable:
+```sh
+usb-tether off
 ```
 
-The kernel loads `rtl_bt/rtl8761bu_fw.bin` and
-`rtl_bt/rtl8761bu_config.bin` from `/lib/firmware`. These are userspace
-firmware files and are not embedded in the kernel image.
+### Screen Brightness
+Adjust backlight brightness:
+```sh
+brightnessctl set 50%
+# or directly:
+echo 500 > /sys/class/leds/lcd-backlight/brightness
+```
+
+### Graphical Desktop
+To start the Xorg Openbox desktop with on-screen keyboard:
+```sh
+start-desktop
+# or simply:
+startx
+```
+
+### Clean Power Off / Battery Calibration
+* Always shut down cleanly from the shell:
+  ```sh
+  poweroff
+  ```
+* **Battery Tip:** If the battery reading ever desyncs after an unexpected crash, boot into Recovery mode, select **"Power off"** from the recovery menu, and then power the phone on normally. This resets the PMIC fuel gauge cleanly.

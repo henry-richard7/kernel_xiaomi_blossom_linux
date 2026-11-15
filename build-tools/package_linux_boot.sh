@@ -3,8 +3,15 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 OUT_DIR="${ROOT_DIR}/out-linux"
-STOCK_BOOT="${1:?Usage: package_linux_boot.sh STOCK_BOOT_IMAGE [OUTPUT_IMAGE]}"
+DEFAULT_STOCK="/home/henry/Redmi-9A-Mods/Backups/stock-boot.img"
+STOCK_BOOT="${1:-${DEFAULT_STOCK}}"
 OUTPUT_IMAGE="${2:-${OUT_DIR}/boot-linux.img}"
+
+if [ ! -f "${STOCK_BOOT}" ]; then
+	echo "Usage: package_linux_boot.sh [STOCK_BOOT_IMAGE] [OUTPUT_IMAGE]" >&2
+	echo "Stock boot image not found at: ${STOCK_BOOT}" >&2
+	exit 1
+fi
 
 [[ -f "${OUT_DIR}/arch/arm64/boot/Image.gz" ]] || {
 	echo "Missing Linux kernel image; run build-tools/compile_linux.sh first." >&2

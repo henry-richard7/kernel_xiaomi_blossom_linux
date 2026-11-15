@@ -5,6 +5,9 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 OUT_DIR="${ROOT_DIR}/out-linux"
 INITRAMFS_DIR="${ROOT_DIR}/linux/initramfs"
 ROOTFS_IMAGE="${ROOTFS_IMAGE:-${OUT_DIR}/linux-rootfs.ext4}"
+if [ ! -f "${ROOTFS_IMAGE}" ] && [ -f "${ROOT_DIR}/../alpine-rootfs/linux-rootfs.ext4" ]; then
+	ROOTFS_IMAGE="${ROOT_DIR}/../alpine-rootfs/linux-rootfs.ext4"
+fi
 OUTPUT="${OUT_DIR}/initramfs.cpio.gz"
 
 if [ ! -f "${ROOTFS_IMAGE}" ]; then
