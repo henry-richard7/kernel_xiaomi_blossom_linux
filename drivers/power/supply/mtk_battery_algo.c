@@ -1212,26 +1212,18 @@ void fgr_dod_init(struct mtk_battery *gm)
 	init_swocv = gauge_get_int_property(GAUGE_PROP_PTIM_BATTERY_VOLTAGE)
 		* 10;
 
-	if (algo->rtc_ui_soc == 0 || con0_soc == 0) {
-		algo->rtc_ui_soc = OCV_to_SOC_c(gm, init_swocv);
-		algo->fg_c_d0_soc = algo->rtc_ui_soc;
-
-		if (algo->rtc_ui_soc < 0) {
-			bm_err("[%s]rtcui<0,set to 0,rtc_ui_soc:%d fg_c_d0_soc:%d\n",
-				__func__,
-				algo->rtc_ui_soc, algo->fg_c_d0_soc);
-			algo->rtc_ui_soc = 0;
+	{
+		int real_ocv_soc = calc_real_ocv_soc(init_swocv / 10);
+		if (algo->rtc_ui_soc == 0 || con0_soc == 0 || abs((algo->rtc_ui_soc / 100) - real_ocv_soc) > 15) {
+			algo->rtc_ui_soc = real_ocv_soc * UNIT_TRANS_100;
+			algo->fg_c_d0_soc = algo->rtc_ui_soc;
+			algo->ui_d0_soc = algo->rtc_ui_soc;
+			bm_err("[%s] sync OCV with real battery voltage! swocv=%d, real_ocv_soc=%d, con0_uisoc=%d\n",
+				__func__, init_swocv, real_ocv_soc, con0_uisoc);
+		} else {
+			algo->ui_d0_soc = algo->rtc_ui_soc;
+			algo->fg_c_d0_soc = UNIT_TRANS_100 * con0_soc;
 		}
-
-		algo->ui_d0_soc = algo->rtc_ui_soc;
-		bm_err("[%s]rtcui=0 case,init_swocv=%d,OCV_to_SOC_c=%d ui:[%d %d] con0_soc=[%d %d]\n",
-			__func__,
-			init_swocv, algo->fg_c_d0_soc,
-			algo->ui_d0_soc, algo->rtc_ui_soc,
-			con0_soc, con0_uisoc);
-	} else {
-		algo->ui_d0_soc = algo->rtc_ui_soc;
-		algo->fg_c_d0_soc = UNIT_TRANS_100 * con0_soc;
 	}
 
 	algo->fg_c_d0_ocv = SOC_to_OCV_c(gm, algo->fg_c_d0_soc);

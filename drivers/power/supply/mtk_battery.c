@@ -242,7 +242,7 @@ static enum power_supply_property battery_props[] = {
 	POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN,
 };
 
-static int interpolate_soc(struct fuelgauge_profile_struct *profile, int size, int ocv)
+static __maybe_unused int interpolate_soc(struct fuelgauge_profile_struct *profile, int size, int ocv)
 {
 	int i;
 	if (size <= 0 || !profile)
@@ -267,6 +267,47 @@ static int interpolate_soc(struct fuelgauge_profile_struct *profile, int size, i
 			
 			dod = ((long long)(d2 - d1) * (ocv - v1)) / (v2 - v1) + d1;
 			return (int)(((long long)(max_dod - dod) * 100) / max_dod);
+		}
+	}
+	return 50;
+}
+
+int calc_real_ocv_soc(int vbat_mv)
+{
+	/* Open-circuit voltage curve for Redmi 9A BN56 5000mAh Li-Po battery */
+	static const struct {
+		int v;
+		int soc;
+	} ocv_tbl[] = {
+		{ 4330, 100 },
+		{ 4220,  90 },
+		{ 4120,  80 },
+		{ 4020,  70 },
+		{ 3940,  60 },
+		{ 3860,  50 },
+		{ 3810,  40 },
+		{ 3770,  30 },
+		{ 3730,  20 },
+		{ 3680,  10 },
+		{ 3630,   5 },
+		{ 3580,   4 },
+		{ 3480,   1 },
+		{ 3400,   0 }
+	};
+	int i, num = ARRAY_SIZE(ocv_tbl);
+
+	if (vbat_mv >= ocv_tbl[0].v)
+		return 100;
+	if (vbat_mv <= ocv_tbl[num - 1].v)
+		return 0;
+
+	for (i = 0; i < num - 1; i++) {
+		if (vbat_mv <= ocv_tbl[i].v && vbat_mv >= ocv_tbl[i+1].v) {
+			int dv = ocv_tbl[i].v - ocv_tbl[i+1].v;
+			int dsoc = ocv_tbl[i].soc - ocv_tbl[i+1].soc;
+			if (dv == 0)
+				return ocv_tbl[i].soc;
+			return ocv_tbl[i+1].soc + ((vbat_mv - ocv_tbl[i+1].v) * dsoc) / dv;
 		}
 	}
 	return 50;
@@ -321,51 +362,19 @@ static int battery_psy_get_property(struct power_supply *psy,
 		if (gm->fixed_uisoc != 0xffff) {
 			val->intval = gm->fixed_uisoc;
 		} else {
-			int cap = bs_data->bat_capacity;
 			int vbat = gauge_get_int_property(GAUGE_PROP_BATTERY_VOLTAGE);
-			int raw_soc = -1;
+			int real_soc;
+
 			if (vbat > 10000)
 				vbat /= 1000;
-			if (vbat > 0) {
-				struct fuelgauge_profile_struct *profile_p;
-				int size;
-				extern struct fuelgauge_profile_struct *fg_get_profile(struct mtk_battery *gm, int temperature);
-				extern int fg_get_saddles(struct mtk_battery *gm);
+			if (vbat <= 0)
+				vbat = 3700;
 
-				profile_p = fg_get_profile(gm, 25);
-				if (!profile_p) {
-					int idx = gm->fg_table_cust_data.active_table_number / 2;
-					if (idx >= 0 && idx < gm->fg_table_cust_data.active_table_number) {
-						profile_p = &gm->fg_table_cust_data.fg_profile[idx].fg_profile[0];
-					}
-				}
-				if (profile_p) {
-					memcpy(&gm->fg_table_cust_data.fg_profile_temperature_1[0],
-						profile_p,
-						sizeof(gm->fg_table_cust_data.fg_profile_temperature_1));
-				}
-
-				size = fg_get_saddles(gm);
-				if (profile_p && size > 0) {
-					raw_soc = interpolate_soc(profile_p, size, vbat * 10);
-					pr_debug("MTK_BATTERY_DEBUG: size=%d, tb1=%d, p0_vol=%d, p1_vol=%d, plast_vol=%d, target_ocv=%d, raw_soc=%d\n",
-						size, gm->fg_table_cust_data.temperature_tb1,
-						profile_p[0].voltage, profile_p[1].voltage, profile_p[size-1].voltage, vbat * 10, raw_soc);
-				} else {
-					pr_debug("MTK_BATTERY_DEBUG: profile_p is NULL or size=0!\n");
-				}
-			}
-			pr_debug("MTK_BATTERY: cap=%d ui_soc=%d vbat=%d raw_soc=%d active=%d\n",
-				cap, gm->ui_soc, vbat, raw_soc, gm->algo.active);
-			if (cap <= 0 || cap > 100) {
-				cap = raw_soc;
-				if (cap <= 0 || cap > 100)
-					cap = 50;
-				gm->ui_soc = cap;
-				bs_data->bat_capacity = cap;
-				gm->algo.ui_soc = cap * 100;
-			}
-			val->intval = cap;
+			real_soc = calc_real_ocv_soc(vbat);
+			gm->ui_soc = real_soc;
+			bs_data->bat_capacity = real_soc;
+			gm->algo.ui_soc = real_soc * 100;
+			val->intval = real_soc;
 		}
 		break;
 	case POWER_SUPPLY_PROP_CURRENT_NOW:

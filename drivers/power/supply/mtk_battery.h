@@ -999,6 +999,7 @@ extern void battery_update(struct mtk_battery *gm);
 extern bool fg_interrupt_check(struct mtk_battery *gm);
 extern void fg_nafg_monitor(struct mtk_battery *gm);
 extern bool is_algo_active(struct mtk_battery *gm);
+extern int calc_real_ocv_soc(int vbat_mv);
 extern int disable_shutdown_cond(struct mtk_battery *gm, int shutdown_cond);
 extern int set_shutdown_cond(struct mtk_battery *gm, int shutdown_cond);
 extern bool is_kernel_power_off_charging(void);
