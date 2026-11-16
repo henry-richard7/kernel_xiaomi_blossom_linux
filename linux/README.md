@@ -2,6 +2,9 @@
 
 Native GNU/Linux port for the Xiaomi Redmi 9A (MediaTek Helio G25 / MT6765 / MT6762G), booting directly into Alpine Linux from an external microSD card without modifying or endangering internal Android eMMC partitions.
 
+> [!TIP]
+> For the complete rootfs overlay, Sxmo mobile desktop profile, and automated MicroSD card installer, see the companion repository: [**xiaomi-redmi-9a-linux**](https://github.com/henry-richard7/xiaomi-redmi-9a-linux).
+
 ---
 
 ## Hardware Support & Status
@@ -11,6 +14,7 @@ Native GNU/Linux port for the Xiaomi Redmi 9A (MediaTek Helio G25 / MT6765 / MT6
 | **CPU / SoC** | MediaTek MT6765 (Helio G25) 8x Cortex-A53 | **Working** | Full multicore support |
 | **Display** | SimpleFB / Framebuffer (`/dev/fb0`) | **Working** | 720 × 1600 resolution |
 | **Touchscreen** | Novatek TS (`novatek_ts_djn_fw.bin`) | **Working** | Firmware embedded into kernel & ramdisk |
+| **Audio (Speaker)** | MediaTek DL2 ALSA SoC routing | **Working** | PipeWire / WirePlumber support |
 | **Internal Wi-Fi** | MediaTek `wmt-wifi` / `wmt-pyloader` (`wlan0`) | **Working** | Loads MTK combo firmware & connects on boot |
 | **USB Tethering** | Linux ConfigFS RNDIS (`usb0`) | **Working** | Managed via `/usr/local/bin/usb-tether` |
 | **USB Serial Console** | Linux ConfigFS ACM (`ttyGS0`) | **Working** | Root shell on `/dev/ttyACM*` on PC |
