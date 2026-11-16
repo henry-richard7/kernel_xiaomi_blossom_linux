@@ -659,6 +659,14 @@ static int audio_dpd_set(struct snd_kcontrol *kcontrol,
 
 #ifdef AUDIO_DL2_ISR_COPY_SUPPORT
 
+static int Audio_DL2_DataTransfer_get(struct snd_kcontrol *kcontrol,
+				      struct snd_ctl_elem_value *ucontrol)
+{
+	ucontrol->value.integer.value[0] = 0;
+	ucontrol->value.integer.value[1] = 0;
+	return 0;
+}
+
 static int Audio_DL2_DataTransfer(struct snd_kcontrol *kcontrol,
 				  struct snd_ctl_elem_value *ucontrol)
 {
@@ -767,7 +775,7 @@ static const struct snd_kcontrol_new Audio_snd_routing_controls[] = {
 		     AudioI2S1_Setting_Get, AudioI2S1_Setting_Set),
 #ifdef AUDIO_DL2_ISR_COPY_SUPPORT
 	SOC_DOUBLE_EXT("Audio_DL2_DataTransfer", SND_SOC_NOPM, 0, 1, 65536, 0,
-		       NULL, Audio_DL2_DataTransfer),
+		       Audio_DL2_DataTransfer_get, Audio_DL2_DataTransfer),
 #endif
 	SOC_SINGLE_EXT("Audio_LowLatency_Debug", SND_SOC_NOPM, 0, 0x20000, 0,
 		       Audio_LowLatencyDebug_Get, Audio_LowLatencyDebug_Set),

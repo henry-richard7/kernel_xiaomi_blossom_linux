@@ -266,6 +266,11 @@ static int mtk_pcm_dl2_params(struct snd_pcm_substream *substream,
 	/* struct snd_dma_buffer *dma_buf = &substream->dma_buffer; */
 	int ret = 0;
 
+	if (!Dl2_Playback_dma_buf || !Dl2_Playback_dma_buf->area) {
+		pr_err("%s: Dl2_Playback_dma_buf not allocated\n", __func__);
+		return -ENODEV;
+	}
+
 	/* runtime->dma_bytes has to be set manually to allow mmap */
 	substream->runtime->dma_bytes = params_buffer_bytes(hw_params);
 
