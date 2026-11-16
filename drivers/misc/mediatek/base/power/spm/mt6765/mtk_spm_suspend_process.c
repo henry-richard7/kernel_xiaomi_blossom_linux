@@ -52,7 +52,7 @@ void spm_set_sysclk_settle(void)
 }
 
 #if !defined(CONFIG_FPGA_EARLY_PORTING)
-static int mt_power_gs_dump_suspend_count = 2;
+static int mt_power_gs_dump_suspend_count = 0;
 #endif
 int spm_suspend_pre_process(struct pwr_ctrl *pwrctrl)
 {

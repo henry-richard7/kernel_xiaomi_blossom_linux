@@ -4783,8 +4783,7 @@ int primary_display_suspend(void)
 done:
 	primary_set_state(DISP_SLEPT);
 
-	if (primary_display_get_power_mode_nolock() == DOZE_SUSPEND)
-		primary_display_esd_check_enable(0);
+	primary_display_esd_check_enable(0);
 
 	DISPDBG("release wakelock...\n");
 	__pm_relax(pri_wk_lock);
@@ -5232,8 +5231,7 @@ done:
 	if (disp_helper_get_option(DISP_OPT_CV_BYSUSPEND))
 		DSI_ForceConfig(0);
 
-	if (primary_display_get_power_mode_nolock() == DOZE)
-		primary_display_esd_check_enable(1);
+	primary_display_esd_check_enable(1);
 
 	DISPDBG("hold the wakelock...\n");
 	__pm_stay_awake(pri_wk_lock);

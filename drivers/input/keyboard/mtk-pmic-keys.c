@@ -429,6 +429,8 @@ static int mtk_pmic_keys_probe(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, keys);
 
+	device_init_wakeup(&pdev->dev, true);
+
 	return 0;
 }
 
