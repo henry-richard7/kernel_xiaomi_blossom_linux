@@ -2526,6 +2526,8 @@ static int mtkfb_probe(struct platform_device *pdev)
 	}
 	init_state++;		/* 5 */
 	DISPMSG("register_framebuffer start...\n");
+	fbi->skip_vt_switch = true;
+	pm_set_vt_switch(0);
 	r = register_framebuffer(fbi);
 	if (r != 0) {
 		DISPERR("register_framebuffer failed\n");
