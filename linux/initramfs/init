@@ -122,6 +122,46 @@ log_state "loop device attached"
 mount -t ext4 -o rw,noatime /dev/loop0 /newroot || fail "could not mount the ext4 rootfs image"
 log_state "rootfs mounted"
 
+# Self-healing: restore clean working network configuration if needed
+if [ -d /newroot/etc/wpa_supplicant ]; then
+	cat << 'EOF_WPA' > /newroot/etc/wpa_supplicant/wpa_cli.sh
+#!/bin/sh
+IFNAME="${1}"
+ACTION="${2}"
+DHCPIDFILE="/var/run/udhcpc.${IFNAME}.pid"
+
+case "${ACTION}" in
+	CONNECTED)
+		logger -t wpa_cli "Interface ${IFNAME} CONNECTED: acquiring DHCP lease..."
+		if [ -e "${DHCPIDFILE}" ]; then
+			read -r DHCPID < "${DHCPIDFILE}"
+			kill -USR1 "${DHCPID}" 2>/dev/null || udhcpc -b -R -p "${DHCPIDFILE}" -i "${IFNAME}"
+		else
+			udhcpc -b -R -p "${DHCPIDFILE}" -i "${IFNAME}"
+		fi
+		;;
+	DISCONNECTED)
+		logger -t wpa_cli "Interface ${IFNAME} DISCONNECTED"
+		if [ -e "${DHCPIDFILE}" ]; then
+			read -r DHCPID < "${DHCPIDFILE}"
+			kill -USR2 "${DHCPID}" 2>/dev/null
+		fi
+		;;
+esac
+EOF_WPA
+	chmod 0755 /newroot/etc/wpa_supplicant/wpa_cli.sh
+fi
+
+if [ -d /newroot/etc/network ]; then
+	cat << 'EOF_NET' > /newroot/etc/network/interfaces
+auto lo
+iface lo inet loopback
+
+auto wlan0
+iface wlan0 inet dhcp
+EOF_NET
+fi
+
 # If booting Droidian, setup vendor partition, block symlinks, and container mounts
 if [ "${IS_DROIDIAN}" -eq 1 ]; then
 	echo "Droidian detected: setting up Halium hardware environment..." >/dev/console

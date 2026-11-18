@@ -26,6 +26,8 @@
 #include <linux/skbuff.h>	/* netlink */
 #include <linux/socket.h>	/* netlink */
 #include <linux/time.h>
+#include <linux/timekeeping.h>
+#include <linux/jiffies.h>
 #include <linux/vmalloc.h>
 #include <linux/wait.h>		/* For wait queue*/
 #include <net/sock.h>		/* netlink */
@@ -313,6 +315,109 @@ int calc_real_ocv_soc(int vbat_mv)
 	return 50;
 }
 
+static int mtk_fuelgauge_filter_soc(struct mtk_battery *gm, struct battery_data *bs_data)
+{
+	static int fg_filtered_vocv = 0;
+	static int fg_last_soc = -1;
+	static time64_t fg_last_step_sec = 0;
+
+	int vbat = gauge_get_int_property(GAUGE_PROP_BATTERY_VOLTAGE);
+	int ibatt = gauge_get_int_property(GAUGE_PROP_BATTERY_CURRENT);
+	int v_ocv, target_soc, delta_v;
+	time64_t now_sec;
+	int is_charging;
+
+	if (vbat > 10000)
+		vbat /= 1000;
+	if (vbat <= 0)
+		vbat = 3700;
+
+	/*
+	 * Internal resistance compensation:
+	 * GAUGE_PROP_BATTERY_CURRENT is in units of 0.1mA (positive = charging, negative = discharging).
+	 * R_int is ~150 mOhm for the BN56 battery + protection board + connector.
+	 * delta_V (mV) = I(mA) * R(mOhm) / 1000 = (ibatt / 10) * 150 / 1000 = (ibatt * 15) / 1000.
+	 */
+	delta_v = (ibatt * 15) / 1000;
+	if (delta_v > 250)
+		delta_v = 250;
+	else if (delta_v < -250)
+		delta_v = -250;
+
+	v_ocv = vbat - delta_v;
+
+	/* Low-pass IIR filter on OCV (7/8 previous + 1/8 current) */
+	if (fg_filtered_vocv <= 0)
+		fg_filtered_vocv = v_ocv;
+	else
+		fg_filtered_vocv = (fg_filtered_vocv * 7 + v_ocv + 4) / 8;
+
+	target_soc = calc_real_ocv_soc(fg_filtered_vocv);
+	if (target_soc > 100)
+		target_soc = 100;
+	if (target_soc < 0)
+		target_soc = 0;
+
+	now_sec = ktime_get_boottime_seconds();
+
+	/* Initial boot: restore preserved SoC from hardware PMIC RTC if valid */
+	if (fg_last_soc < 0) {
+		int rtc_soc = gauge_get_int_property(GAUGE_PROP_RTC_UI_SOC);
+
+		if (rtc_soc > 0 && rtc_soc <= 100 && abs(rtc_soc - target_soc) <= 20)
+			fg_last_soc = rtc_soc;
+		else
+			fg_last_soc = target_soc;
+
+		fg_last_step_sec = now_sec;
+		return fg_last_soc;
+	}
+
+	/* Fast recovery if resumed from long sleep (gap > 60s) */
+	if (now_sec - fg_last_step_sec > 60) {
+		fg_last_soc = target_soc;
+		fg_last_step_sec = now_sec;
+		gauge_set_property(GAUGE_PROP_RTC_UI_SOC, fg_last_soc);
+		return fg_last_soc;
+	}
+
+	/* Low-battery shutdown safety: never delay dropping below 3450mV */
+	if (vbat < 3450 && target_soc < fg_last_soc) {
+		fg_last_soc = target_soc;
+		fg_last_step_sec = now_sec;
+		gauge_set_property(GAUGE_PROP_RTC_UI_SOC, fg_last_soc);
+		return fg_last_soc;
+	}
+
+	is_charging = (bs_data->bat_status == POWER_SUPPLY_STATUS_CHARGING ||
+		       bs_data->bat_status == POWER_SUPPLY_STATUS_FULL ||
+		       ibatt > 200);
+
+	if (is_charging) {
+		if (target_soc > fg_last_soc) {
+			int interval = (target_soc - fg_last_soc > 10) ? 3 : 15;
+
+			if (now_sec - fg_last_step_sec >= interval) {
+				fg_last_soc++;
+				fg_last_step_sec = now_sec;
+				gauge_set_property(GAUGE_PROP_RTC_UI_SOC, fg_last_soc);
+			}
+		}
+	} else {
+		if (target_soc < fg_last_soc) {
+			int interval = (fg_last_soc - target_soc > 10) ? 3 : 15;
+
+			if (now_sec - fg_last_step_sec >= interval) {
+				fg_last_soc--;
+				fg_last_step_sec = now_sec;
+				gauge_set_property(GAUGE_PROP_RTC_UI_SOC, fg_last_soc);
+			}
+		}
+	}
+
+	return fg_last_soc;
+}
+
 static int battery_psy_get_property(struct power_supply *psy,
 	enum power_supply_property psp,
 	union power_supply_propval *val)
@@ -362,15 +467,8 @@ static int battery_psy_get_property(struct power_supply *psy,
 		if (gm->fixed_uisoc != 0xffff) {
 			val->intval = gm->fixed_uisoc;
 		} else {
-			int vbat = gauge_get_int_property(GAUGE_PROP_BATTERY_VOLTAGE);
-			int real_soc;
+			int real_soc = mtk_fuelgauge_filter_soc(gm, bs_data);
 
-			if (vbat > 10000)
-				vbat /= 1000;
-			if (vbat <= 0)
-				vbat = 3700;
-
-			real_soc = calc_real_ocv_soc(vbat);
 			gm->ui_soc = real_soc;
 			bs_data->bat_capacity = real_soc;
 			gm->algo.ui_soc = real_soc * 100;
