@@ -15,7 +15,8 @@ Native GNU/Linux port for the Xiaomi Redmi 9A (MediaTek Helio G25 / MT6765 / MT6
 | **Display** | SimpleFB / Framebuffer (`/dev/fb0`) | **Working** | 720 × 1600 resolution |
 | **Touchscreen** | Novatek TS (`novatek_ts_djn_fw.bin`) | **Working** | Firmware embedded into kernel & ramdisk |
 | **Audio (Speaker)** | MediaTek DL2 ALSA SoC routing | **Working** | PipeWire / WirePlumber support |
-| **Internal Wi-Fi** | MediaTek `wmt-wifi` / `wmt-pyloader` (`wlan0`) | **Working** | Loads MTK combo firmware & connects on boot |
+| **Internal Wi-Fi** | MediaTek `wmt-wifi` / `mtk-wmt-loader` (`wlan0`) | **Working** | Loads MTK combo firmware & connects on boot |
+| **Internal Bluetooth** | MediaTek MT6631 Bluetooth 5.0 (`hci0` via `mtk-bt-bridge`) | **Working** | Native BlueZ 5.86 support, scanning & pairing |
 | **USB Tethering** | Linux ConfigFS RNDIS (`usb0`) | **Working** | Managed via `/usr/local/bin/usb-tether` |
 | **USB Serial Console** | Linux ConfigFS ACM (`ttyGS0`) | **Working** | Root shell on `/dev/ttyACM*` on PC |
 | **Direct Screen Shell** | OpenRC autologin on `/dev/tty1` | **Working** | Root prompt directly on phone display |
