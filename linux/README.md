@@ -3,7 +3,7 @@
 Native GNU/Linux port for the Xiaomi Redmi 9A (MediaTek Helio G25 / MT6765 / MT6762G), booting directly into Alpine Linux from an external microSD card without modifying or endangering internal Android eMMC partitions.
 
 > [!TIP]
-> For the complete rootfs overlay, Sxmo mobile desktop profile, and automated MicroSD card installer, see the companion repository: [**xiaomi-redmi-9a-linux**](https://github.com/henry-richard7/xiaomi-redmi-9a-linux).
+> For the complete rootfs overlay, Sxmo mobile desktop profile, and automated MicroSD card installer, see the companion repository: [**xiaomi-redmi-9a-linux**](https://github.com/xiaomi-redmi-9a-linux/xiaomi-redmi-9a-linux).
 
 ---
 
