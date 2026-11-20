@@ -1,0 +1,528 @@
+diff --git a/hybris/common/Makefile.am b/hybris/common/Makefile.am
+index 9bfc1db..722acdd 100644
+--- a/hybris/common/Makefile.am
++++ b/hybris/common/Makefile.am
+@@ -3,26 +3,26 @@ lib_LTLIBRARIES = \
+ 
+ SUBDIRS =
+ 
++if HAS_ANDROID_10_0_0
++SUBDIRS += q
++else
++if HAS_ANDROID_8_0_0
++SUBDIRS += o
++else
++if HAS_ANDROID_7_0_0
++SUBDIRS += n
++else
++if HAS_ANDROID_6_0_0
++SUBDIRS += mm
++else
+ if !WANT_ARCH_ARM64
+ if !WANT_ARCH_X86_64
+ SUBDIRS += jb
+ endif
+ endif
+-
+-if HAS_ANDROID_6_0_0
+-SUBDIRS += mm
+ endif
+-
+-if HAS_ANDROID_7_0_0
+-SUBDIRS += n
+ endif
+-
+-if HAS_ANDROID_8_0_0
+-SUBDIRS += o
+ endif
+-
+-if HAS_ANDROID_10_0_0
+-SUBDIRS += q
+ endif
+ 
+ libhybris_common_la_SOURCES = \
+@@ -53,7 +53,7 @@ endif
+ libhybris_common_la_CPPFLAGS = \
+ 	-I$(top_srcdir)/include \
+ 	$(ANDROID_HEADERS_CFLAGS) \
+-	-I$(top_srcdir)/common \
++	-I$(top_srcdir)/common -include $(top_srcdir)/common/musl_hooks_compat.h \
+ 	-DLINKER_PLUGIN_DIR=\"$(libdir)/libhybris/linker\"
+ 
+ if WANT_ADRENO_QUIRKS
+@@ -72,23 +72,24 @@ endif
+ if WANT_UBUNTU_LINKER_OVERRIDES
+ libhybris_common_la_CPPFLAGS += -DUBUNTU_LINKER_OVERRIDES
+ endif
+-if !WANT_ARCH_ARM64
+-libhybris_common_la_CPPFLAGS += -DWANT_LINKER_JB
+-endif
++if HAS_ANDROID_10_0_0
++libhybris_common_la_CPPFLAGS += -DWANT_LINKER_Q
++else
++if HAS_ANDROID_8_0_0
++libhybris_common_la_CPPFLAGS += -DWANT_LINKER_O
++else
++if HAS_ANDROID_7_0_0
++libhybris_common_la_CPPFLAGS += -DWANT_LINKER_N
++else
+ if HAS_ANDROID_6_0_0
+ libhybris_common_la_CPPFLAGS += -DWANT_LINKER_MM
++else
++if !WANT_ARCH_ARM64
++libhybris_common_la_CPPFLAGS += -DWANT_LINKER_JB
+ endif
+-if WANT_ARM_TRACING
+-libhybris_common_la_CPPFLAGS += -DWANT_ARM_TRACING
+ endif
+-if HAS_ANDROID_7_0_0
+-libhybris_common_la_CPPFLAGS += -DWANT_LINKER_N
+ endif
+-if HAS_ANDROID_8_0_0
+-libhybris_common_la_CPPFLAGS += -DWANT_LINKER_O
+ endif
+-if HAS_ANDROID_10_0_0
+-libhybris_common_la_CPPFLAGS += -DWANT_LINKER_Q
+ endif
+ 
+ libhybris_common_la_CXXFLAGS = \
+diff --git a/hybris/common/hooks.c b/hybris/common/hooks.c
+index 67bbf31..d4f0e0e 100644
+--- a/hybris/common/hooks.c
++++ b/hybris/common/hooks.c
+@@ -18,6 +18,7 @@
+  */
+ 
+ #include "config.h"
++#include "musl_hooks_compat.h"
+ 
+ #include <hybris/common/binding.h>
+ 
+@@ -923,7 +924,9 @@ static int _hybris_hook_pthread_cond_destroy(pthread_cond_t *cond)
+          * when it is destroyed and bionic code does not always follow this
+          * requirement. To prevent deadlocks reset the reference count of the
+          * condition variable. */
++        #ifdef __GLIBC__
+         realcond->__data.__wrefs = 0;
++#endif
+         ret = pthread_cond_destroy(realcond);
+         free(realcond);
+     }
+@@ -1587,7 +1590,11 @@ static int _hybris_hook_fgetpos(FILE *fp, bionic_fpos_t *pos)
+     fpos_t my_fpos;
+     int ret = fgetpos(_get_actual_fp(fp), &my_fpos);
+ 
++    #ifdef __GLIBC__
+     *pos = my_fpos.__pos;
++#else
++    *pos = my_fpos.__lldata;
++#endif
+ 
+     return ret;
+ }
+@@ -1599,7 +1606,11 @@ static int _hybris_hook_fgetpos64(FILE *fp, bionic_fpos64_t *pos)
+     fpos64_t my_fpos;
+     int ret = fgetpos64(_get_actual_fp(fp), &my_fpos);
+ 
++    #ifdef __GLIBC__
+     *pos = my_fpos.__pos;
++#else
++    *pos = my_fpos.__lldata;
++#endif
+ 
+     return ret;
+ }
+@@ -1700,8 +1711,12 @@ static int _hybris_hook_fsetpos(FILE *fp, const bionic_fpos_t *pos)
+     TRACE_HOOK("fp %p pos %p", fp, pos);
+ 
+     fpos_t my_fpos;
++#ifdef __GLIBC__
+     my_fpos.__pos = *pos;
+     memset(&my_fpos.__state, 0, sizeof(mbstate_t));
++#else
++    my_fpos.__lldata = *pos;
++#endif
+ 
+     return fsetpos(_get_actual_fp(fp), &my_fpos);
+ }
+@@ -1711,8 +1726,12 @@ static int _hybris_hook_fsetpos64(FILE *fp, const bionic_fpos64_t *pos)
+     TRACE_HOOK("fp %p pos %p", fp, pos);
+ 
+     fpos64_t my_fpos;
++#ifdef __GLIBC__
+     my_fpos.__pos = *pos;
+     memset(&my_fpos.__state, 0, sizeof(mbstate_t));
++#else
++    my_fpos.__lldata = *pos;
++#endif
+ 
+     return fsetpos64(_get_actual_fp(fp), &my_fpos);
+ }
+@@ -2544,7 +2563,8 @@ static char* _hybris_hook__gnu_strerror_r(int errnum, char *buf, size_t buf_len)
+ {
+     TRACE_HOOK("errnum %d buf '%s' buf len %zu", errnum, buf, buf_len);
+ 
+-    return strerror_r(errnum, buf, buf_len);
++    strerror_r(errnum, buf, buf_len);
++    return buf;
+ }
+ 
+ static int _hybris_hook_mprotect(void *addr, size_t len, int prot)
+@@ -2955,6 +2975,11 @@ int _hybris_hook_android_fdsan_close_with_tag(int fd, uint64_t tag)
+     return close(fd);
+ }
+ 
++static size_t _hybris_hook___ctype_get_mb_cur_max(void)
++{
++    return 4;
++}
++
+ // old property hooks for pre-android 8 approach
+ static struct _hook hooks_properties[] = {
+     HOOK_INDIRECT(property_get),
+@@ -3307,6 +3332,8 @@ static struct _hook hooks_mm[] = {
+     /* libgen.h */
+     HOOK_INDIRECT(basename),
+     HOOK_INDIRECT(dirname),
++    
++
+     /* locale.h */
+     HOOK_DIRECT(newlocale),
+     HOOK_DIRECT(freelocale),
+@@ -3314,6 +3341,7 @@ static struct _hook hooks_mm[] = {
+     HOOK_DIRECT(uselocale),
+     HOOK_DIRECT(localeconv),
+     HOOK_DIRECT(setlocale),
++    HOOK_TO(__ctype_get_mb_cur_max, _hybris_hook___ctype_get_mb_cur_max),
+     /* sys/mman.h */
+ #if defined(LP64)
+     HOOK_DIRECT(mmap),
+diff --git a/hybris/common/q/Makefile.am b/hybris/common/q/Makefile.am
+index 8b23d0f..ee0c5a1 100644
+--- a/hybris/common/q/Makefile.am
++++ b/hybris/common/q/Makefile.am
+@@ -54,7 +54,7 @@ q_la_CPPFLAGS = \
+ 	$(AM_CPPFLAGS) \
+ 	-I$(top_srcdir)/include \
+ 	-I$(top_srcdir)/common \
+-	-I$(bionic_libc)/ \
++	-I$(top_srcdir)/common/q -include $(top_srcdir)/common/q/hybris_compat.h -I$(bionic_libc)/ \
+ 	-I$(bionic_libc)/include \
+ 	-DDEFAULT_HYBRIS_LD_LIBRARY_PATH="\"@DEFAULT_HYBRIS_LD_LIBRARY_PATH@\"" \
+ 	-D_USING_LIBCXX \
+diff --git a/hybris/common/q/hybris_compat.h b/hybris/common/q/hybris_compat.h
+index b8155b7..93616b9 100644
+--- a/hybris/common/q/hybris_compat.h
++++ b/hybris/common/q/hybris_compat.h
+@@ -1,40 +1,71 @@
+-/*
+- * Copyright (C) 2008 The Android Open Source Project
+- * All rights reserved.
+- *
+- * Redistribution and use in source and binary forms, with or without
+- * modification, are permitted provided that the following conditions
+- * are met:
+- *  * Redistributions of source code must retain the above copyright
+- *    notice, this list of conditions and the following disclaimer.
+- *  * Redistributions in binary form must reproduce the above copyright
+- *    notice, this list of conditions and the following disclaimer in
+- *    the documentation and/or other materials provided with the
+- *    distribution.
+- *
+- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
+- * FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
+- * COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+- * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+- * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS
+- * OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED
+- * AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+- * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT
+- * OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+- * SUCH DAMAGE.
+- */
+-
+-
+ #ifndef HYBRIS_ANDROID_MM_COMPAT_H_
+ #define HYBRIS_ANDROID_MM_COMPAT_H_
+ 
++#ifndef __ASSEMBLER__
++
++#ifndef _GNU_SOURCE
++#define _GNU_SOURCE
++#endif
++#ifndef _LARGEFILE64_SOURCE
++#define _LARGEFILE64_SOURCE
++#endif
++
+ #include <string.h>
+ #include <memory.h>
++#include <unistd.h>
++#include <errno.h>
++#include <sys/types.h>
++#include <pthread.h>
++
++#ifndef __BEGIN_DECLS
++#if defined(__cplusplus)
++#define __BEGIN_DECLS extern "C" {
++#define __END_DECLS }
++#else
++#define __BEGIN_DECLS
++#define __END_DECLS
++#endif
++#endif
++
++#ifndef TEMP_FAILURE_RETRY
++#define TEMP_FAILURE_RETRY(exp) ({         \
++    __typeof__(exp) _rc;                   \
++    do {                                   \
++        _rc = (exp);                       \
++    } while (_rc == -1 && errno == EINTR); \
++    _rc; })
++#endif
++
++#ifndef off64_t
++typedef off_t off64_t;
++#endif
++
++typedef void (*__sighandler_t)(int);
++#ifndef PTHREAD_RECURSIVE_MUTEX_INITIALIZER_NP
++#define PTHREAD_RECURSIVE_MUTEX_INITIALIZER_NP { { 1, 0, 0, 0, 0, 0, 0, 0, 0, 0 } }
++#endif
++
++#ifndef R_AARCH64_IRELATIVE
++#define R_AARCH64_IRELATIVE 1032
++#endif
++
++#ifndef R_AARCH64_TLSDESC
++#define R_AARCH64_TLSDESC 1031
++#endif
++
++#ifdef __cplusplus
++static inline const char *gnu_basename(const char *path) {
++    const char *last = strrchr(path, '/');
++    return last ? last + 1 : path;
++}
++#define basename gnu_basename
+ 
+ extern "C" size_t strlcpy(char *dest, const char *src, size_t size);
+ extern "C" size_t strlcat(char *dst, const char *src, size_t size);
++#else
++size_t strlcpy(char *dest, const char *src, size_t size);
++size_t strlcat(char *dst, const char *src, size_t size);
++#endif
+ 
+ #define ELF_ST_BIND(x)          ((x) >> 4)
+ 
+@@ -50,10 +81,18 @@ extern "C" size_t strlcat(char *dst, const char *src, size_t size);
+  * Experimental support for SHT_RELR sections. For details, see proposal
+  * at https://groups.google.com/forum/#!topic/generic-abi/bX460iggiKg
+  */
++#ifndef DT_ANDROID_RELR
+ #define DT_ANDROID_RELR 0x6fffe000
++#endif
++#ifndef DT_ANDROID_RELRSZ
+ #define DT_ANDROID_RELRSZ 0x6fffe001
++#endif
++#ifndef DT_ANDROID_RELRENT
+ #define DT_ANDROID_RELRENT 0x6fffe003
++#endif
++#ifndef DT_ANDROID_RELRCOUNT
+ #define DT_ANDROID_RELRCOUNT 0x6fffe005
++#endif
+ 
+ /* Defined in glibc >= 2.36, and used in bionic since apilevel 30 */
+ #ifndef DT_RELRSZ
+@@ -73,26 +112,48 @@ extern "C" size_t strlcat(char *dst, const char *src, size_t size);
+  *
+  * Android compressed rel/rela sections
+  */
++#ifndef DT_ANDROID_REL
+ #define DT_ANDROID_REL (DT_LOOS + 2)
++#endif
++#ifndef DT_ANDROID_RELSZ
+ #define DT_ANDROID_RELSZ (DT_LOOS + 3)
++#endif
+ 
++#ifndef DT_ANDROID_RELA
+ #define DT_ANDROID_RELA (DT_LOOS + 4)
++#endif
++#ifndef DT_ANDROID_RELASZ
+ #define DT_ANDROID_RELASZ (DT_LOOS + 5)
++#endif
+ 
+ /*
+  * From bionic/libc/include/bits/elf_arm64.h
+  */
++#ifndef R_AARCH64_TLS_DTPREL64
+ #define R_AARCH64_TLS_DTPREL64          1028    /* Module-relative offset. */
++#endif
++#ifndef R_AARCH64_TLS_DTPMOD64
+ #define R_AARCH64_TLS_DTPMOD64          1029    /* Module index. */
++#endif
++#ifndef R_AARCH64_TLS_TPREL64
+ #define R_AARCH64_TLS_TPREL64           1030    /* TP-relative offset. */
++#endif
+ 
+ /*
+  * From bionic/libc/include/bits/elf_arm64.h
+  *
+  * Dynamic array tags
+  */
++#ifndef DT_AARCH64_BTI_PLT
+ #define DT_AARCH64_BTI_PLT              0x70000001
++#endif
++#ifndef DT_AARCH64_PAC_PLT
+ #define DT_AARCH64_PAC_PLT              0x70000003
++#endif
++#ifndef DT_AARCH64_VARIANT_PCS
+ #define DT_AARCH64_VARIANT_PCS          0x70000005
+-
+ #endif
++
++#endif /* !__ASSEMBLER__ */
++
++#endif /* HYBRIS_ANDROID_MM_COMPAT_H_ */
+diff --git a/hybris/common/q/linker_relocs.h b/hybris/common/q/linker_relocs.h
+index 68191f9..1d2ade5 100644
+--- a/hybris/common/q/linker_relocs.h
++++ b/hybris/common/q/linker_relocs.h
+@@ -29,6 +29,7 @@
+ #pragma once
+ 
+ #include <elf.h>
++#include "hybris_compat.h"
+ 
+ #define R_GENERIC_NONE 0 // R_*_NONE is always 0
+ 
+diff --git a/hybris/egl/platforms/fbdev/fbdev_window.cpp b/hybris/egl/platforms/fbdev/fbdev_window.cpp
+index 4f8b498..169a385 100644
+--- a/hybris/egl/platforms/fbdev/fbdev_window.cpp
++++ b/hybris/egl/platforms/fbdev/fbdev_window.cpp
+@@ -70,7 +70,7 @@ FbDevNativeWindowBuffer::~FbDevNativeWindowBuffer()
+ FbDevNativeWindow::FbDevNativeWindow()
+ {
+     m_bufFormat = hybris_gralloc_fbdev_format();
+-    m_usage = GRALLOC_USAGE_HW_FB;
++    m_usage = GRALLOC_USAGE_HW_FB | GRALLOC_USAGE_HW_RENDER | GRALLOC_USAGE_SW_READ_OFTEN | GRALLOC_USAGE_SW_WRITE_OFTEN;
+     m_bufferCount = 0;
+     m_allocateBuffers = true;
+ 
+diff --git a/hybris/gralloc/gralloc.c b/hybris/gralloc/gralloc.c
+index 973b247..58910b7 100644
+--- a/hybris/gralloc/gralloc.c
++++ b/hybris/gralloc/gralloc.c
+@@ -1,3 +1,7 @@
++#include <linux/fb.h>
++#include <sys/ioctl.h>
++#include <sys/mman.h>
++#include <fcntl.h>
+ /*
+  * Copyright (c) 2018-2022 Jolla Ltd.
+  *
+@@ -395,39 +399,88 @@ int hybris_gralloc_unlock(buffer_handle_t handle)
+     return ret;
+ }
+ 
+-// Legacy fbdev methods. these are not available in gralloc1 thus use old API.
++// Linux fbdev fallback when framebuffer_device is NULL (Android 8+ Treble)
++static int _fb_fd = -1;
++static struct fb_var_screeninfo _fb_var;
++static struct fb_fix_screeninfo _fb_fix;
++static void *_fb_mmap_ptr = MAP_FAILED;
++
++static void _ensure_fb0(void)
++{
++    if (_fb_fd < 0) {
++        _fb_fd = open("/dev/fb0", O_RDWR);
++        if (_fb_fd >= 0) {
++            if (ioctl(_fb_fd, FBIOGET_VSCREENINFO, &_fb_var) == 0 &&
++                ioctl(_fb_fd, FBIOGET_FSCREENINFO, &_fb_fix) == 0) {
++                _fb_mmap_ptr = mmap(NULL, _fb_fix.smem_len, PROT_READ | PROT_WRITE, MAP_SHARED, _fb_fd, 0);
++            }
++        }
++    }
++}
++
+ int hybris_gralloc_fbdev_format(void)
+ {
+-    assert(framebuffer_device);
+-    return framebuffer_device->format;
++    if (framebuffer_device)
++        return framebuffer_device->format;
++    return HAL_PIXEL_FORMAT_RGBA_8888;
+ }
+ 
+ int hybris_gralloc_fbdev_framebuffer_count(void)
+ {
+-    assert(framebuffer_device);
+-    return framebuffer_device->numFramebuffers;
++    if (framebuffer_device)
++        return framebuffer_device->numFramebuffers;
++    return 2;
+ }
+ 
+ int hybris_gralloc_fbdev_setSwapInterval(int interval)
+ {
+-    assert(framebuffer_device);
+-    return framebuffer_device->setSwapInterval(framebuffer_device, interval);
++    if (framebuffer_device)
++        return framebuffer_device->setSwapInterval(framebuffer_device, interval);
++    return 0;
+ }
+ 
+-int hybris_gralloc_fbdev_post(buffer_handle_t handle)
++int hybris_gralloc_fbdev_width(void)
+ {
+-    assert(framebuffer_device);
+-    return framebuffer_device->post(framebuffer_device, handle);
++    if (framebuffer_device)
++        return framebuffer_device->width;
++    _ensure_fb0();
++    return (_fb_fd >= 0) ? _fb_var.xres : 720;
+ }
+ 
+-int hybris_gralloc_fbdev_width(void)
++int hybris_gralloc_fbdev_height(void)
+ {
+-    assert(framebuffer_device);
+-    return framebuffer_device->width;
++    if (framebuffer_device)
++        return framebuffer_device->height;
++    _ensure_fb0();
++    return (_fb_fd >= 0) ? _fb_var.yres : 1600;
+ }
+ 
+-int hybris_gralloc_fbdev_height(void)
++int hybris_gralloc_fbdev_post(buffer_handle_t handle)
+ {
+-    assert(framebuffer_device);
+-    return framebuffer_device->height;
++    if (framebuffer_device)
++        return framebuffer_device->post(framebuffer_device, handle);
++
++    _ensure_fb0();
++    if (_fb_mmap_ptr == MAP_FAILED || _fb_fd < 0)
++        return -1;
++
++    void *vaddr_buf[16];
++    memset(vaddr_buf, 0x55, sizeof(vaddr_buf));
++    int w = _fb_var.xres;
++    int h = _fb_var.yres;
++    int ret = hybris_gralloc_lock(handle,
++        GRALLOC_USAGE_SW_READ_OFTEN | GRALLOC_USAGE_SW_WRITE_OFTEN,
++        0, 0, w, h, (void **)&vaddr_buf[0]);
++    void *vaddr = vaddr_buf[0];
++
++    if (ret == 0 && vaddr) {
++        size_t copy_size = _fb_fix.line_length * h;
++        if (copy_size > _fb_fix.smem_len)
++            copy_size = _fb_fix.smem_len;
++        memcpy(_fb_mmap_ptr, vaddr, copy_size);
++        hybris_gralloc_unlock(handle);
++        ioctl(_fb_fd, FBIOPAN_DISPLAY, &_fb_var);
++        return 0;
++    }
++    return ret;
+ }

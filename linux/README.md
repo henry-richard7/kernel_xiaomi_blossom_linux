@@ -12,7 +12,8 @@ Native GNU/Linux port for the Xiaomi Redmi 9A (MediaTek Helio G25 / MT6765 / MT6
 | Subsystem | Driver / Mechanism | Status | Notes |
 | :--- | :--- | :--- | :--- |
 | **CPU / SoC** | MediaTek MT6765 (Helio G25) 8x Cortex-A53 | **Working** | Full multicore support |
-| **Display** | SimpleFB / Framebuffer (`/dev/fb0`) | **Working** | 720 × 1600 resolution |
+| **Display** | SimpleFB / Framebuffer (`/dev/fb0`) | **Working** | 720 × 1600 resolution @ 60 Hz |
+| **GPU (3D Acceleration)** | PowerVR Rogue GE8320 (Series 8XE) | **Working** | Patched `libhybris` + DDK 1.13, ~395 FPS raw, 650 MHz DVFS |
 | **Touchscreen** | Novatek TS (`novatek_ts_djn_fw.bin`) | **Working** | Firmware embedded into kernel & ramdisk |
 | **Audio (Speaker)** | MediaTek DL2 ALSA SoC routing | **Working** | PipeWire / WirePlumber support |
 | **Internal Wi-Fi** | MediaTek `wmt-wifi` / `mtk-wmt-loader` (`wlan0`) | **Working** | Loads MTK combo firmware & connects on boot |
@@ -115,3 +116,29 @@ startx
   poweroff
   ```
 * **Battery Tip:** If the battery reading ever desyncs after an unexpected crash, boot into Recovery mode, select **"Power off"** from the recovery menu, and then power the phone on normally. This resets the PMIC fuel gauge cleanly.
+
+---
+
+## Technical Documentation & Advanced Features
+
+* [**PowerVR Rogue GE8320 GPU Acceleration Guide**](file:///media/primaryHdd/Coding/Android/kernel_xiaomi_blossom_linux/linux/docs/GPU_ACCELERATION.md)
+  * Kernel defconfig & embedded Rogue firmware (`rgx.fw`, `rgx.sh`).
+  * Patched `libhybris` for 64-bit musl libc with `/dev/fb0` gralloc1 backend.
+  * 395+ FPS hardware benchmark, DVFS governor scaling up to 650 MHz.
+  * Udev rules for unprivileged `/dev/ion`, `/dev/pvr_sync`, `/dev/mtk_cmdq`.
+
+* [**Sxmo Mobile Desktop & Power Management**](file:///media/primaryHdd/Coding/Android/kernel_xiaomi_blossom_linux/linux/docs/SXMO_POWER_MANAGEMENT.md)
+  * Sxmo configuration migration tracking & `configversion` hash management.
+  * Screenoff smart Bluetooth idle sleep saving 66 mA continuously.
+  * Audio ALSA DSP cleanup udev rules (`89-mtk-audio.rules`).
+
+### Running the GPU Benchmark
+To test hardware 3D acceleration on device:
+```sh
+/root/gpu_fps_benchmark
+# or as normal unprivileged user:
+gpu_fps_benchmark
+```
+* **Raw Compute Benchmark:** Renders 500 frames of full 3D Gouraud-shaded geometry at 720 × 1600 (~395 FPS, 2.5 ms/frame).
+* **On-Screen Display:** Renders a 3D rotating color-interpolated tetrahedron directly to `/dev/fb0` at 60 Hz.
+
